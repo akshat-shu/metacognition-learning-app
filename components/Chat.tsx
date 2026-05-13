@@ -79,6 +79,7 @@ export function Chat() {
   const [statusMessage, setStatusMessage] = useState<string>("");
   const streamingStudentIdRef = useRef<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const tokenBufferRef = useRef<string>("");
 
   useEffect(() => {
     if (!transcriptRef.current) {
@@ -88,20 +89,8 @@ export function Chat() {
   }, [turns, loading]);
 
   const pushStudentToken = (token: string) => {
+    tokenBufferRef.current += token;
     setIsStreamingStudent(true);
-    setTurns((current) => {
-      const activeId = streamingStudentIdRef.current;
-      if (activeId) {
-        return current.map((turn) =>
-          turn.id === activeId
-            ? { ...turn, content: `${turn.content}${token}` }
-            : turn,
-        );
-      }
-      const id = makeId();
-      streamingStudentIdRef.current = id;
-      return [...current, { id, role: "student", content: token }];
-    });
   };
 
   const consumeSseEvent = (entry: { event: string; data: string }) => {
@@ -116,15 +105,17 @@ export function Chat() {
       }
       case "final": {
         const payload = JSON.parse(entry.data) as SseEventPayloads["final"];
+        // Add the buffered message to turns if there are tokens
+        if (tokenBufferRef.current.trim().length > 0) {
+          setTurns((current) => [...current, { id: makeId(), role: "student", content: tokenBufferRef.current }]);
+        }
+        // Reset buffer
+        tokenBufferRef.current = "";
+        streamingStudentIdRef.current = null;
         setTag(payload.tag);
         setEmoticon(payload.emoticon);
         setSessionId(payload.sessionId);
         setStoredSessionId(payload.sessionId);
-        if (!streamingStudentIdRef.current) {
-          setStatusMessage(
-            "Sam's message did not render correctly this turn. Please send once more.",
-          );
-        }
         break;
       }
       case "error": {
@@ -180,33 +171,37 @@ export function Chat() {
       }
 
       if (!res.ok || !res.body) {
-        throw new Error("Failed to open chat stream.");
+        throw new Error(`Failed to open chat stream. Status: ${res.status}`);
       }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) {
           break;
         }
-        buffer += decoder.decode(value, { stream: true });
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
 
         while (buffer.includes("\n\n")) {
           const boundary = buffer.indexOf("\n\n");
           const rawEvent = buffer.slice(0, boundary);
           buffer = buffer.slice(boundary + 2);
 
-          for (const entry of parseSseEvents(`${rawEvent}\n\n`)) {
+          const parsed = parseSseEvents(`${rawEvent}\n\n`);
+          for (const entry of parsed) {
             consumeSseEvent(entry);
           }
         }
       }
 
       if (buffer.trim().length > 0) {
-        for (const entry of parseSseEvents(`${buffer}\n\n`)) {
+        const parsed = parseSseEvents(`${buffer}\n\n`);
+        for (const entry of parsed) {
           consumeSseEvent(entry);
         }
       }
