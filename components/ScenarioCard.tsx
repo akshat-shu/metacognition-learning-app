@@ -14,23 +14,25 @@ export function ScenarioCard({
   ending,
 }: ScenarioCardProps) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-md">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-600">
             Scenario
           </p>
-          <h1 className="mt-1 text-lg font-semibold text-slate-900">
+          <h1 className="mt-3 text-2xl font-bold text-slate-900">
             You&apos;re talking to {personaName}
           </h1>
-          <p className="mt-1 text-sm text-slate-600">Subject: {subject}</p>
-          <p className="mt-2 text-sm leading-relaxed text-slate-700">{scenario}</p>
+          <p className="mt-2 text-sm font-medium text-slate-600">
+            Subject: {subject}
+          </p>
+          <p className="mt-4 text-sm leading-relaxed text-slate-700">{scenario}</p>
         </div>
         <button
           type="button"
           onClick={onEndSession}
           disabled={ending}
-          className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+          className="rounded-lg bg-gradient-to-r from-slate-700 to-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 hover:from-slate-800 hover:to-slate-900 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
         >
           {ending ? "Ending..." : "End session"}
         </button>

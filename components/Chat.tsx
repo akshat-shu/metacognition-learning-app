@@ -244,8 +244,8 @@ export function Chat() {
   };
 
   return (
-    <div className="flex flex-1 flex-col p-4 md:p-6">
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4">
+    <div className="flex flex-col p-4 md:p-6 bg-gradient-to-br from-slate-50 via-slate-50 to-blue-50 w-full min-h-screen">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
         <ScenarioCard
           personaName={brief.persona.name}
           subject={brief.subject}
@@ -254,12 +254,12 @@ export function Chat() {
           ending={ending}
         />
 
-        <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-[1fr_280px]">
-          <div className="flex min-h-[420px] flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_280px]">
+          <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-md overflow-hidden max-h-[500px]">
             <div ref={transcriptRef} className="flex-1 space-y-3 overflow-y-auto p-4">
               {turns.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  Start by asking Sam a question about how falling objects behave.
+                <p className="text-center text-sm text-slate-500 italic py-4">
+                  Start by asking a question about how falling objects behave.
                 </p>
               ) : (
                 turns.map((turn) => (
@@ -272,23 +272,23 @@ export function Chat() {
                 ))
               )}
               {loading && !isStreamingStudent ? (
-                <p className="text-sm text-slate-500">Sam is thinking...</p>
+                <p className="text-sm text-slate-500 italic animate-pulse">Thinking...</p>
               ) : null}
             </div>
 
-            <form onSubmit={handleSend} className="border-t border-slate-200 p-3">
-              <div className="flex gap-2">
+            <form onSubmit={handleSend} className="border-t border-slate-200 bg-white p-4">
+              <div className="flex gap-3">
                 <input
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
                   disabled={loading}
                   placeholder="Teach by probing their reasoning..."
-                  className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-indigo-200 focus:ring"
+                  className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-900 outline-none transition-all focus:ring-2 focus:ring-blue-400 focus:border-blue-400 disabled:bg-slate-100 disabled:text-slate-500"
                 />
                 <button
                   type="submit"
                   disabled={loading || input.trim().length === 0}
-                  className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-indigo-300"
+                  className="rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm hover:shadow-md"
                 >
                   Send
                 </button>
@@ -298,14 +298,14 @@ export function Chat() {
 
           <div className="space-y-3">
             <EmoticonFace state={emoticon} />
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-md flex-shrink-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
                 Current signal
               </p>
-              <p className="mt-1 text-sm font-medium text-slate-800">{tag}</p>
+              <p className="mt-3 text-sm font-medium text-slate-700 leading-relaxed">{tag}</p>
             </div>
             {statusMessage ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900 shadow-sm">
                 {statusMessage}
               </div>
             ) : null}

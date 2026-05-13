@@ -37,10 +37,10 @@ const EYE_BY_STATE: Record<EmoticonState, { left: string; right: string }> = {
 
 export function EmoticonFace({ state }: EmoticonFaceProps) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-md flex justify-center">
       <svg
         viewBox="0 0 100 100"
-        className="mx-auto h-[120px] w-[120px] text-slate-700 transition-all duration-300"
+        className="h-[140px] w-[140px] text-indigo-600 transition-all duration-300"
         role="img"
         aria-label={`Student mood: ${state}`}
       >

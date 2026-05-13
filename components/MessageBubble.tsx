@@ -9,14 +9,13 @@ export function MessageBubble({ role, content, name }: MessageBubbleProps) {
   return (
     <div className={`flex w-full ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-sm ${
-          isUser
-            ? "bg-slate-900 text-white"
-            : "bg-white text-slate-900 border border-slate-200"
-        }`}
+        className={`max-w-[80%] rounded-xl px-4 py-3 shadow-sm ${isUser
+          ? "bg-gradient-to-br from-blue-500 to-blue-600 text-white"
+          : "bg-gradient-to-br from-slate-100 to-slate-50 text-slate-900 border border-slate-200"
+          }`}
       >
         {!isUser && (
-          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             {name ?? "Student"}
           </div>
         )}
