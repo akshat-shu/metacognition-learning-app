@@ -101,6 +101,7 @@ export const SynthesisResultSchema = z.object({
     calibration: z.number(),
   }),
   takeaway: z.string(),
+  reflection_check: z.string().optional(),
   ai_literacy: z.object({
     probes_fired: z.number(),
     traps_fired: z.number(),

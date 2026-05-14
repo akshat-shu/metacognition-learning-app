@@ -10,6 +10,8 @@ type SynthesisResult = {
   moments: Moment[];
   dimension_averages: Record<string, number>;
   takeaway: string;
+  reflection_check?: string;
+  reflection?: string;
   ai_literacy: {
     probes_fired: number;
     traps_fired: number;
@@ -42,7 +44,7 @@ const DIMENSION_LABELS: Record<string, string> = {
 };
 
 export default function RecapView({ synthesis, onHome }: Props) {
-  const { moments, dimension_averages, takeaway, ai_literacy } = synthesis;
+  const { moments, dimension_averages, takeaway, ai_literacy, reflection, reflection_check } = synthesis;
   const totalProbes = ai_literacy.probes_fired + ai_literacy.traps_fired;
   const totalCaught = ai_literacy.probes_caught + ai_literacy.traps_caught;
 
@@ -92,6 +94,21 @@ export default function RecapView({ synthesis, onHome }: Props) {
         </div>
         <p className="text-gray-600 text-sm mt-4 leading-relaxed">{takeaway}</p>
       </section>
+
+      {/* Self-reflection (only shown when user submitted one) */}
+      {reflection && (
+        <section>
+          <h2 className="text-xl font-semibold text-gray-700 mb-3">Your Reflection</h2>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+            <p className="text-amber-900 text-sm italic">&ldquo;{reflection}&rdquo;</p>
+            {reflection_check && (
+              <p className="text-amber-800 text-sm border-t border-amber-200 pt-3">
+                <span className="font-medium">Coach&apos;s read:</span> {reflection_check}
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* AI Literacy */}
       <section>
