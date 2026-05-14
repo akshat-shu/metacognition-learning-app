@@ -1,0 +1,137 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Chat from '@/components/Chat';
+import EmoticonFace from '@/components/EmoticonFace';
+import SamStatePanel from '@/components/SamStatePanel';
+import CoachCard from '@/components/CoachCard';
+
+type SessionData = {
+  sessionId: string;
+  opener: string;
+  session: {
+    brief: {
+      persona: { name: string; age: number; vibe: string };
+      subject: string;
+      scenario: string;
+      misconceptions: Array<{ id: string; belief: string }>;
+    };
+    turns: Array<{ role: 'user' | 'student'; content: string }>;
+    miscStates: Record<string, string>;
+  };
+};
+
+export default function SessionPage() {
+  const params = useParams();
+  const router = useRouter();
+  const sessionId = params.id as string;
+
+  const [sessionData, setSessionData] = useState<SessionData | null>(null);
+  const [emoticon, setEmoticon] = useState<'delighted' | 'happy' | 'neutral' | 'concerned' | 'sad'>('neutral');
+  const [tag, setTag] = useState('');
+  const [miscStates, setMiscStates] = useState<Record<string, string>>({});
+  const [coachNudge, setCoachNudge] = useState<{ nudge: string; type: string } | null>(null);
+  const [stateTransition, setStateTransition] = useState<{ from: string; to: string } | null>(null);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem(`session_${sessionId}`);
+    if (stored) {
+      const data = JSON.parse(stored) as SessionData;
+      setSessionData(data);
+      setMiscStates(data.session.miscStates);
+    }
+  }, [sessionId]);
+
+  const handleMeta = (meta: any) => {
+    if (meta.emoticon) setEmoticon(meta.emoticon);
+    if (meta.tag) setTag(meta.tag);
+    if (meta.miscStates && Object.keys(meta.miscStates).length > 0) {
+      setMiscStates(meta.miscStates);
+    }
+    if (meta.coachNudge) {
+      setCoachNudge(meta.coachNudge);
+    }
+    if (meta.state_transition) {
+      setStateTransition({ from: meta.state_transition.from, to: meta.state_transition.to });
+      setTag(`Sam shifted: ${meta.state_transition.from} → ${meta.state_transition.to}`);
+      setTimeout(() => setStateTransition(null), 5000);
+    }
+  };
+
+  const handleEnd = async () => {
+    try {
+      const res = await fetch('/api/session/end', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        sessionStorage.setItem(`recap_${sessionId}`, JSON.stringify(data.synthesis));
+        router.push(`/recap/${sessionId}`);
+      }
+    } catch (error) {
+      console.error('End session error:', error);
+    }
+  };
+
+  if (!sessionData) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-gray-500 mt-4">Loading session...</p>
+        </div>
+      </main>
+    );
+  }
+
+  const { brief } = sessionData.session;
+  const initialMessages = sessionData.session.turns.map(t => ({
+    role: t.role,
+    content: t.content,
+  }));
+
+  return (
+    <main className="h-screen flex">
+      {/* Chat — 60% */}
+      <div className="w-full lg:w-3/5 flex flex-col border-r border-gray-200">
+        <Chat
+          sessionId={sessionId}
+          initialMessages={initialMessages}
+          personaName={brief.persona.name}
+          subject={brief.subject}
+          onMeta={handleMeta}
+          onEnd={handleEnd}
+        />
+      </div>
+
+      {/* Side panel — 40% */}
+      <div className="hidden lg:flex lg:w-2/5 flex-col p-6 space-y-6 overflow-y-auto bg-gray-50">
+        <EmoticonFace emoticon={emoticon} tag={tag} />
+
+        {stateTransition && (
+          <div className="animate-fade-in bg-teal-50 border border-teal-200 rounded-xl p-3 text-center">
+            <p className="text-teal-800 text-sm font-medium">
+              Sam shifted: {stateTransition.from} &rarr; {stateTransition.to}
+            </p>
+          </div>
+        )}
+
+        <SamStatePanel
+          miscStates={miscStates as any}
+          misconceptions={brief.misconceptions}
+        />
+
+        {coachNudge && (
+          <CoachCard
+            nudge={coachNudge.nudge}
+            type={coachNudge.type as any}
+            onDismiss={() => setCoachNudge(null)}
+          />
+        )}
+      </div>
+    </main>
+  );
+}
