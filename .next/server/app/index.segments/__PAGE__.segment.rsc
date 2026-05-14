@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[22016,["/_next/static/chunks/01xlw8hd842-c.js","/_next/static/chunks/0d3shmwh5_nmn.js","/_next/static/chunks/0ka051yepewro.js"],""]
+3:I[97367,["/_next/static/chunks/01xlw8hd842-c.js","/_next/static/chunks/0d3shmwh5_nmn.js"],"OutletBoundary"]
+4:"$Sreact.suspense"
+0:{"rsc":["$","$1","c",{"children":[["$","main",null,{"className":"mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center p-6","children":["$","div",null,{"className":"w-full rounded-2xl border border-slate-200 bg-white p-8 shadow-md","children":[["$","h1",null,{"className":"text-3xl font-bold text-slate-900","children":"Reverse Tutor"}],["$","p",null,{"className":"mt-3 text-sm leading-relaxed text-slate-600","children":"You will teach Sam, who is sometimes right and sometimes wrong. Your goal is to coach carefully: don't over-correct, don't under-challenge."}],["$","$L2",null,{"href":"/preteach/physics-freefall-1","className":"mt-6 inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white","children":"Begin pre-teach"}]]}]}],[["$","script","script-0",{"src":"/_next/static/chunks/0ka051yepewro.js","async":true}]],["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"Vpkxe_jWG-xth5x0-sSQl"}
+5:null
