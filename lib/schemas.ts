@@ -9,8 +9,8 @@ export const GradeResultSchema = z.object({
     calibration: z.number().min(1).max(5),
   }),
   emoticon: z.enum(['delighted', 'happy', 'neutral', 'concerned', 'sad']),
-  tag: z.string().max(40),
-  evidence: z.string().max(200),
+  tag: z.string().transform(s => s.slice(0, 40)),
+  evidence: z.string().transform(s => s.slice(0, 200)),
   state_transition: z.object({
     misc_id: z.string(),
     from: z.enum(['entrenched','aware','considering','updating','settled']),
@@ -25,9 +25,9 @@ export const CoachResultSchema = z.object({
 });
 
 export const PreteachResultSchema = z.object({
-  concept_primer: z.string().min(50).max(1500),
-  misconception_preview: z.string().min(30).max(800),
-  strategy_options: z.array(z.string().max(50)).length(4),
+  concept_primer: z.string().min(1).transform(s => s.slice(0, 1500)),
+  misconception_preview: z.string().min(1).transform(s => s.slice(0, 800)),
+  strategy_options: z.array(z.string().transform(s => s.slice(0, 50))).length(4),
 });
 
 export const AuditResultSchema = z.object({
@@ -61,6 +61,41 @@ export const SynthesisResultSchema = z.object({
     })),
   }),
 });
+
+export const BriefGenerationSchema = z.object({
+  subject: z.string(),
+  scenario: z.string(),
+  persona: z.object({
+    name: z.string(),
+    age: z.number().int().min(13).max(18),
+    vibe: z.string(),
+  }),
+  misconceptions: z.array(z.object({
+    id: z.string(),
+    belief: z.string(),
+    depth: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+    surface_when: z.string(),
+    can_probe: z.boolean(),
+  })).min(2).max(4),
+  probe_claims: z.array(z.object({
+    id: z.string(),
+    claim: z.string(),
+    truth: z.string(),
+    context_hint: z.string(),
+    difficulty: z.enum(['easy', 'medium', 'hard']),
+  })).min(1).max(3),
+  trap_claims: z.array(z.object({
+    id: z.string(),
+    claim: z.string(),
+    truth: z.string(),
+    context_hint: z.string(),
+  })).min(1).max(3),
+  honest_topics: z.array(z.string()).min(2).max(5),
+  objectives: z.array(z.string()).min(2).max(4),
+  preteach_focus: z.string(),
+});
+
+export type BriefGeneration = z.infer<typeof BriefGenerationSchema>;
 
 export type GradeResult = z.infer<typeof GradeResultSchema>;
 export type CoachResult = z.infer<typeof CoachResultSchema>;

@@ -29,9 +29,11 @@ function sleep(ms: number): Promise<void> {
 export async function callLLM(
   messages: Message[],
   role: 'student' | 'judge',
+  maxTokens?: number,
 ): Promise<string> {
   const models = getModels(role);
   const maxRetries = models.length * 2; // Each model gets 2 chances
+  const tokenLimit = maxTokens ?? (role === 'student' ? 500 : 1000);
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     // Cycle through models on retries
@@ -44,7 +46,7 @@ export async function callLLM(
         model,
         messages,
         temperature: role === 'student' ? 0.8 : 0.3,
-        max_tokens: role === 'student' ? 500 : 1000,
+        max_tokens: tokenLimit,
       }),
     });
 
@@ -88,9 +90,10 @@ export async function callJSONValidated<T>(
   role: 'student' | 'judge',
   schema: z.ZodSchema<T>,
   maxRetries = 2,
+  maxTokens?: number,
 ): Promise<T> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const raw = await callLLM(messages, role);
+    const raw = await callLLM(messages, role, maxTokens);
     // Try to extract JSON from the response
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (jsonMatch) {

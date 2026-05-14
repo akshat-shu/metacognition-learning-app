@@ -1,14 +1,16 @@
 import { Brief } from '../types';
 import { sampleBrief } from './sample-physics';
 
-const briefs: Record<string, Brief> = {
-  [sampleBrief.id]: sampleBrief,
-};
+const briefs = new Map<string, Brief>([[sampleBrief.id, sampleBrief]]);
 
 export function getBrief(id: string): Brief | undefined {
-  return briefs[id];
+  return briefs.get(id);
 }
 
 export function getAllBriefs(): Brief[] {
-  return Object.values(briefs);
+  return Array.from(briefs.values());
+}
+
+export function registerBrief(brief: Brief): void {
+  briefs.set(brief.id, brief);
 }
