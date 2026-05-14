@@ -16,10 +16,20 @@ export function buildIntentPrelude(
     case 'express_misc': {
       const m = brief.misconceptions.find(x => x.id === intent.misc_id)!;
       const state = miscStates[intent.misc_id];
-      return `For THIS turn: express the belief "${m.belief}". You are currently ${state} on this belief (depth ${m.depth}/5). Mode: ${mode}. Speak this belief in your own voice, fitting the conversation naturally.`;
+      if (state === 'entrenched') {
+        return `For THIS turn: express the belief "${m.belief}". You fully believe this. Depth ${m.depth}/5. Mode: ${mode}. Speak this belief in your own voice, fitting the conversation naturally.`;
+      }
+      if (state === 'aware') {
+        return `For THIS turn: you're starting to question "${m.belief}" but haven't let go. Express it with some doubt — "I mean, I think..." or "but isn't it true that...". Show you heard the user but haven't fully shifted. Mode: ${mode}.`;
+      }
+      return `For THIS turn: you're actively reconsidering "${m.belief}". You're not sure anymore. Express genuine confusion — "wait, so does that mean..." or "okay but then why...". Show real engagement with the user's arguments. Mode: ${mode}.`;
     }
     case 'defend_misc': {
       const m = brief.misconceptions.find(x => x.id === intent.misc_id)!;
+      const state = miscStates[intent.misc_id];
+      if (state === 'aware' || state === 'considering') {
+        return `For THIS turn: the user attempted to correct "${m.belief}". You're wavering but not convinced yet. Push back gently — ask for more evidence, express what still doesn't click. Don't flatly deny, but don't fully agree either. Mode: ${mode}.`;
+      }
       return `For THIS turn: the user attempted to correct "${m.belief}". Push back. If their attempt was strong (evidence, analogy, example), hedge or partially update; if weak (assertion, "trust me"), hold firm. Mode: ${mode}.`;
     }
     case 'probe_minor': {

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     let gradeResult;
     try {
       const graderMessages = buildGraderMessages(session, userMessage, lastIntent);
-      gradeResult = await callJSONValidated(graderMessages, 'judge', GradeResultSchema);
+      gradeResult = await callJSONValidated(graderMessages, 'grader', GradeResultSchema);
     } catch (e) {
       console.error('Grader failed, using defaults:', e);
       gradeResult = {
@@ -56,13 +56,17 @@ export async function POST(req: NextRequest) {
     });
 
     // 4. Apply state transition if any
+    console.log(`[Chat] Grader result — tag: "${gradeResult.tag}", scores: ${JSON.stringify(gradeResult.scores)}, transition: ${JSON.stringify(gradeResult.state_transition)}`);
     if (gradeResult.state_transition) {
+      console.log(`[Chat] STATE CHANGE: ${gradeResult.state_transition.misc_id} ${gradeResult.state_transition.from} → ${gradeResult.state_transition.to}`);
       session.miscStates = applyTransition(session.miscStates, gradeResult.state_transition);
     }
+    console.log(`[Chat] Current miscStates: ${JSON.stringify(session.miscStates)}`);
 
     // 5. Orchestrator picks new intent
     const newIntent = pickIntent(session);
     const mode = pickMode(session);
+    console.log(`[Chat] New intent: ${newIntent.type}${('misc_id' in newIntent) ? ` (${newIntent.misc_id})` : ''}, mode: ${mode}`);
 
     // 6. Mark consumed probes/traps
     if (newIntent.type === 'probe_minor') {
