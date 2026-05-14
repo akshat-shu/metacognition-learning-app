@@ -79,34 +79,15 @@ export const GradeResultSchema = z.object({
     uncertainty: z.number().min(1).max(5),
     calibration: z.number().min(1).max(5),
   }),
-  emoticon: z.string().transform((val): 'delighted' | 'happy' | 'neutral' | 'concerned' | 'sad' => {
-    const valid = ['delighted', 'happy', 'neutral', 'concerned', 'sad'] as const;
-    if (valid.includes(val as any)) return val as any;
-    if (/delight|excell|🎉|🌟|🎯/.test(val)) return 'delighted';
-    if (/happy|good|👍|😊|positive/.test(val)) return 'happy';
-    if (/concern|worry|😟|⚠/.test(val)) return 'concerned';
-    if (/sad|poor|😢|bad/.test(val)) return 'sad';
-    return 'neutral';
-  }),
-  tag: z.string().max(80),
-  evidence: z.string(),
-  // Accept both "state_transition" (single/null) and "state_transitions" (array) from LLM
-  state_transitions: StateTransitionsSchema.optional().default([]),
-  state_transition: StateTransitionSchema.optional(),
-}).transform((val) => {
-  // Merge: if LLM returned singular state_transition, add it to the array
-  const transitions = [...(val.state_transitions || [])];
-  if (val.state_transition) {
-    const exists = transitions.some(t => t.misc_id === val.state_transition!.misc_id);
-    if (!exists) transitions.push(val.state_transition);
-  }
-  return {
-    scores: val.scores,
-    emoticon: val.emoticon,
-    tag: val.tag,
-    evidence: val.evidence,
-    state_transitions: transitions,
-  };
+  emoticon: z.enum(['delighted', 'happy', 'neutral', 'concerned', 'sad']),
+  tag: z.string().transform(s => s.slice(0, 40)),
+  evidence: z.string().transform(s => s.slice(0, 200)),
+  state_transition: z.object({
+    misc_id: z.string(),
+    from: z.enum(['entrenched','aware','considering','updating','settled']),
+    to: z.enum(['entrenched','aware','considering','updating','settled']),
+    reason: z.string(),
+  }).nullable(),
 });
 
 export const CoachResultSchema = z.object({
@@ -123,27 +104,11 @@ export const CoachResultSchema = z.object({
   }),
 });
 
-export const PreteachResultSchema = z.preprocess((val) => {
-  if (typeof val !== 'object' || val === null) return val;
-  const obj = val as Record<string, unknown>;
-  // Normalize known model typos / aliases for concept_primer
-  if (obj.concept_primer === undefined) {
-    const alias =
-      obj.concept_prider ??
-      obj.conceptPrimer ??
-      obj.concept_intro ??
-      obj.concept_summary ??
-      obj.primer;
-    if (alias !== undefined) {
-      return { ...obj, concept_primer: alias };
-    }
-  }
-  return obj;
-}, z.object({
-  concept_primer: z.string().min(50).max(1500),
-  misconception_preview: z.string().min(30).max(800),
-  strategy_options: z.array(z.string().max(50)).length(4),
-}));
+export const PreteachResultSchema = z.object({
+  concept_primer: z.string().min(1).transform(s => s.slice(0, 1500)),
+  misconception_preview: z.string().min(1).transform(s => s.slice(0, 800)),
+  strategy_options: z.array(z.string().transform(s => s.slice(0, 50))).length(4),
+});
 
 export const AuditResultSchema = z.object({
   approve: z.boolean(),
@@ -178,41 +143,40 @@ export const SynthesisResultSchema = z.object({
   }),
 });
 
-// Brief generator output — what the LLM produces. id is added server-side after validation.
-export const GeneratedBriefSchema = z.object({
-  subject: z.string().min(3).max(120),
-  scenario: z.string().min(10).max(400),
+export const BriefGenerationSchema = z.object({
+  subject: z.string(),
+  scenario: z.string(),
   persona: z.object({
-    name: z.string().min(1).max(30),
-    age: z.number().int().min(10).max(20),
-    vibe: z.string().min(2).max(80),
+    name: z.string(),
+    age: z.number().int().min(13).max(18),
+    vibe: z.string(),
   }),
   misconceptions: z.array(z.object({
-    id: z.string().min(1).max(60),
-    belief: z.string().min(5).max(300),
+    id: z.string(),
+    belief: z.string(),
     depth: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
-    surface_when: z.string().min(5).max(300),
-    can_probe: z.boolean().optional().default(false),
-  })).min(1).max(6),
+    surface_when: z.string(),
+    can_probe: z.boolean(),
+  })).min(2).max(4),
   probe_claims: z.array(z.object({
-    id: z.string().min(1).max(60),
-    claim: z.string().min(5).max(300),
-    truth: z.string().min(5).max(400),
-    context_hint: z.string().min(3).max(300),
+    id: z.string(),
+    claim: z.string(),
+    truth: z.string(),
+    context_hint: z.string(),
     difficulty: z.enum(['easy', 'medium', 'hard']),
-  })).max(6).optional().default([]),
+  })).min(1).max(3),
   trap_claims: z.array(z.object({
-    id: z.string().min(1).max(60),
-    claim: z.string().min(5).max(300),
-    truth: z.string().min(5).max(400),
-    context_hint: z.string().min(3).max(300),
-  })).max(6).optional().default([]),
-  honest_topics: z.array(z.string().min(3).max(200)).min(1).max(8),
-  objectives: z.array(z.string().min(5).max(300)).min(1).max(6),
-  preteach_focus: z.string().min(5).max(400),
+    id: z.string(),
+    claim: z.string(),
+    truth: z.string(),
+    context_hint: z.string(),
+  })).min(1).max(3),
+  honest_topics: z.array(z.string()).min(2).max(5),
+  objectives: z.array(z.string()).min(2).max(4),
+  preteach_focus: z.string(),
 });
 
-export type GeneratedBrief = z.infer<typeof GeneratedBriefSchema>;
+export type BriefGeneration = z.infer<typeof BriefGenerationSchema>;
 
 export type GradeResult = z.infer<typeof GradeResultSchema>;
 export type CoachResult = z.infer<typeof CoachResultSchema>;

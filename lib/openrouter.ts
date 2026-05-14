@@ -78,11 +78,12 @@ function sleep(ms: number): Promise<void> {
 
 export async function callLLM(
   messages: Message[],
-  role: LLMRole,
-  opts?: CallOptions,
+  role: 'student' | 'judge',
+  maxTokens?: number,
 ): Promise<string> {
   const models = getModels(role);
   const maxRetries = models.length * 2; // Each model gets 2 chances
+  const tokenLimit = maxTokens ?? (role === 'student' ? 500 : 1000);
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     // Cycle through models on retries
@@ -112,7 +113,12 @@ export async function callLLM(
     const res = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify(body_payload),
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: role === 'student' ? 0.8 : 0.3,
+        max_tokens: tokenLimit,
+      }),
     });
 
     if (res.ok) {
@@ -245,19 +251,15 @@ export async function callJSONValidated<T>(
   role: LLMRole,
   schema: z.ZodSchema<T>,
   maxRetries = 2,
-  opts?: CallOptions,
+  maxTokens?: number,
 ): Promise<T> {
   const expectedKeys = getExpectedKeys(schema);
   let lastRaw = '';
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const raw = await callLLM(messages, role, opts);
-    lastRaw = raw;
-    const parsed = extractJSON(raw);
-    if (parsed !== null) {
-      // Normalize keys before validation (catches concept_prider → concept_primer etc.)
-      const normalized = expectedKeys.length > 0
-        ? normalizeKeys(parsed, expectedKeys) as Record<string, unknown>
-        : parsed;
+    const raw = await callLLM(messages, role, maxTokens);
+    // Try to extract JSON from the response
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
       try {
         const result = schema.parse(normalized);
         return result;
