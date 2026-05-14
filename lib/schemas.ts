@@ -1,5 +1,37 @@
 import { z } from 'zod';
 
+const VALID_STATES = ['entrenched', 'aware', 'considering', 'updating', 'settled'] as const;
+
+// Preprocess state_transition to handle common LLM output variations
+const StateTransitionSchema = z.preprocess((val) => {
+  // null, undefined, empty → null
+  if (val === null || val === undefined || val === 'null') return null;
+  if (typeof val === 'object' && val !== null) {
+    const obj = val as Record<string, unknown>;
+    // Empty object → null
+    if (Object.keys(obj).length === 0) return null;
+    // Must have from and to at minimum
+    const from = obj.from || obj.current || obj.from_state;
+    const to = obj.to || obj.next || obj.to_state;
+    const misc_id = obj.misc_id || obj.miscId || obj.misconception_id || obj.id || '';
+    const reason = obj.reason || obj.explanation || '';
+    if (from && to && VALID_STATES.includes(from as string) && VALID_STATES.includes(to as string)) {
+      return { misc_id: String(misc_id), from, to, reason: String(reason) };
+    }
+    // Has some fields but not valid states → null
+    return null;
+  }
+  return null;
+}, z.union([
+  z.object({
+    misc_id: z.string(),
+    from: z.enum(VALID_STATES),
+    to: z.enum(VALID_STATES),
+    reason: z.string().optional().default(''),
+  }),
+  z.null(),
+]));
+
 export const GradeResultSchema = z.object({
   scores: z.object({
     framing: z.number().min(1).max(5),
@@ -8,19 +40,23 @@ export const GradeResultSchema = z.object({
     uncertainty: z.number().min(1).max(5),
     calibration: z.number().min(1).max(5),
   }),
-  emoticon: z.enum(['delighted', 'happy', 'neutral', 'concerned', 'sad']),
-  tag: z.string().max(40),
-  evidence: z.string().max(200),
-  state_transition: z.object({
-    misc_id: z.string(),
-    from: z.enum(['entrenched','aware','considering','updating','settled']),
-    to: z.enum(['entrenched','aware','considering','updating','settled']),
-    reason: z.string(),
-  }).nullable(),
+  emoticon: z.string().transform((val): 'delighted' | 'happy' | 'neutral' | 'concerned' | 'sad' => {
+    const valid = ['delighted', 'happy', 'neutral', 'concerned', 'sad'] as const;
+    if (valid.includes(val as any)) return val as any;
+    // Map common LLM outputs to valid emoticons
+    if (/delight|excell|🎉|🌟|🎯/.test(val)) return 'delighted';
+    if (/happy|good|👍|😊|positive/.test(val)) return 'happy';
+    if (/concern|worry|😟|⚠/.test(val)) return 'concerned';
+    if (/sad|poor|😢|bad/.test(val)) return 'sad';
+    return 'neutral';
+  }),
+  tag: z.string().max(80),
+  evidence: z.string(),
+  state_transition: StateTransitionSchema,
 });
 
 export const CoachResultSchema = z.object({
-  nudge: z.string().min(1).max(400),
+  nudge: z.string().min(1).max(800),
   type: z.enum(['stuck', 'hint_request', 'transfer_check']),
 });
 

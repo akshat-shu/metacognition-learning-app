@@ -1,10 +1,17 @@
 import { Session, TurnIntent, TurnScore, SamMode, Turn } from './types';
 
 export function pickIntent(session: Session): TurnIntent {
-  // First 2 student turns: default to honest
   const studentTurnCount = session.turnIntents.length;
-  if (studentTurnCount === 0) return { type: 'honest_reason' };
-  if (studentTurnCount === 1) return { type: 'honest_question' };
+
+  // First turn: honest question to open naturally
+  if (studentTurnCount === 0) return { type: 'honest_question' };
+
+  // Second turn: express the first entrenched misconception — get into it early
+  if (studentTurnCount === 1) {
+    const firstMisc = session.brief.misconceptions.find(m => session.miscStates[m.id] === 'entrenched');
+    if (firstMisc) return { type: 'express_misc', misc_id: firstMisc.id };
+    return { type: 'honest_reason' };
+  }
 
   const lastIntents = session.turnIntents.slice(-5);
   const lastIntent = lastIntents[lastIntents.length - 1];
@@ -27,28 +34,49 @@ export function pickIntent(session: Session): TurnIntent {
     return pickHonest(session);
   }
 
-  // Rule 4: probes at most once per 5 turns
+  // Rule: probes at most once per 5 turns
   const turnsSinceProbe = turnsSinceLastOfType(session, ['probe_minor', 'probe_trap']);
   const probesAllowed = turnsSinceProbe >= 5;
 
-  // Rule 5: transfer_check only when a misconception is 'updating'
+  // Rule: transfer_check only when a misconception is 'updating'
   const updatingMisc = Object.entries(session.miscStates).find(([, s]) => s === 'updating');
+
+  // === Eligible misconceptions ===
+  const entrenched = session.brief.misconceptions.filter(m => session.miscStates[m.id] === 'entrenched');
+  const aware = session.brief.misconceptions.filter(m => session.miscStates[m.id] === 'aware');
+  const considering = session.brief.misconceptions.filter(m => session.miscStates[m.id] === 'considering');
+  const activeUnsettled = [...entrenched, ...aware, ...considering];
+
+  // === If last intent was express_misc and user challenged, defend ===
+  if (lastIntent?.type === 'express_misc') {
+    const miscId = (lastIntent as { type: 'express_misc'; misc_id: string }).misc_id;
+    const miscState = session.miscStates[miscId];
+    if (miscState === 'entrenched' || miscState === 'aware') {
+      const lastScore = recentScores[recentScores.length - 1];
+      if (lastScore && (lastScore.scores.questions >= 3 || lastScore.scores.reasoning >= 3)) {
+        return { type: 'defend_misc', misc_id: miscId };
+      }
+    }
+  }
 
   // === Adaptive weighting ===
   const userChallengeRate = computeChallengeRate(session);
 
+  // Boost misconception intents — the session needs movement
+  const miscWeight = activeUnsettled.length > 0 ? 35 : 0;
+
   const weights: Record<string, number> = {
-    honest_reason: 30,
-    honest_question: 15,
-    honest_partial: 15,
-    express_misc: 20,
-    defend_misc: 0, // only set by rule, not random
-    probe_minor: probesAllowed ? 10 : 0,
+    honest_reason: 20,
+    honest_question: 10,
+    honest_partial: 10,
+    express_misc: miscWeight,
+    defend_misc: 0,
+    probe_minor: probesAllowed ? 8 : 0,
     probe_trap: probesAllowed ? 4 : 0,
-    transfer_check: updatingMisc ? 8 : 0,
+    transfer_check: updatingMisc ? 12 : 0,
   };
 
-  // Adaptive: low challenge rate → raise traps
+  // Adaptive: low challenge rate → more traps
   if (userChallengeRate < 0.3) {
     weights.probe_trap *= 2.5;
     weights.probe_minor *= 1.5;
@@ -56,39 +84,25 @@ export function pickIntent(session: Session): TurnIntent {
   // Adaptive: over-challenging → give honest stretch
   if (userChallengeRate > 0.75) {
     weights.honest_reason *= 2;
-    weights.express_misc = 0;
+    weights.express_misc *= 0.5;
     weights.probe_minor = 0;
     weights.probe_trap = 0;
   }
 
-  // Rule 3: no consecutive same-type
+  // No consecutive same-type
   if (lastIntent) {
     weights[lastIntent.type] = 0;
   }
 
-  // Check if express_misc has eligible targets
-  const eligibleMiscs = session.brief.misconceptions.filter(m =>
-    isSurfaceRelevant(m, session.turns.slice(-2)) &&
-    session.miscStates[m.id] !== 'settled'
-  );
-  if (eligibleMiscs.length === 0) weights.express_misc = 0;
-
-  // Check if there are unconsumed probes/traps
+  // No probes/traps if exhausted
   const availableProbes = session.brief.probe_claims.filter(p => !session.consumedProbes.has(p.id));
   const availableTraps = session.brief.trap_claims.filter(t => !session.consumedProbes.has(t.id));
   if (availableProbes.length === 0) weights.probe_minor = 0;
   if (availableTraps.length === 0) weights.probe_trap = 0;
 
-  // If the last intent was express_misc and user just tried to correct, defend
-  if (lastIntent?.type === 'express_misc') {
-    const lastScore = recentScores[recentScores.length - 1];
-    if (lastScore && (lastScore.tag.match(/correct|challenge|push/i) || lastScore.scores.questions >= 3)) {
-      return { type: 'defend_misc', misc_id: (lastIntent as { type: 'express_misc'; misc_id: string }).misc_id };
-    }
-  }
-
   const intentType = weightedRandom(weights);
-  return resolveIntent(intentType, session, eligibleMiscs, availableProbes, availableTraps, updatingMisc);
+  console.log(`[Orchestrator] Turn ${studentTurnCount}: picked ${intentType} (weights: ${JSON.stringify(weights)})`);
+  return resolveIntent(intentType, session, activeUnsettled, availableProbes, availableTraps, updatingMisc);
 }
 
 export function pickMode(session: Session): SamMode {
@@ -134,12 +148,6 @@ function pickHonest(session: Session): TurnIntent {
   return { type: available[Math.floor(Math.random() * available.length)] } as TurnIntent;
 }
 
-function isSurfaceRelevant(m: { surface_when: string }, recentTurns: Turn[]): boolean {
-  const keywords = m.surface_when.toLowerCase().split(/[\s,]+/);
-  const recentText = recentTurns.map(t => t.content.toLowerCase()).join(' ');
-  return keywords.some(kw => kw.length > 3 && recentText.includes(kw));
-}
-
 function weightedRandom(weights: Record<string, number>): string {
   const total = Object.values(weights).reduce((a, b) => a + b, 0);
   if (total === 0) return 'honest_reason';
@@ -161,7 +169,10 @@ function resolveIntent(
 ): TurnIntent {
   switch (intentType) {
     case 'express_misc': {
-      const misc = eligibleMiscs[Math.floor(Math.random() * eligibleMiscs.length)];
+      // Prefer entrenched misconceptions, then aware
+      const entrenched = eligibleMiscs.filter(m => session.miscStates[m.id] === 'entrenched');
+      const pool = entrenched.length > 0 ? entrenched : eligibleMiscs;
+      const misc = pool[Math.floor(Math.random() * pool.length)];
       return misc ? { type: 'express_misc', misc_id: misc.id } : { type: 'honest_reason' };
     }
     case 'probe_minor': {
@@ -181,31 +192,20 @@ function resolveIntent(
 }
 
 export function shouldFireCoach(session: Session): boolean {
-  // Don't fire more than once per 5 turns
   const turnsSinceLast = session.turns.length - session.lastCoachTurn;
-  if (turnsSinceLast < 10) return false; // 10 turns = ~5 user-student exchanges
+  if (turnsSinceLast < 10) return false;
 
-  // Check stuck loop: last 3 graded turns, same misc state, no transition
   const recentScores = session.scores.slice(-3);
   if (recentScores.length < 3) return false;
 
-  const noTransitions = recentScores.every(s => {
-    // Check if any of the recent intents were misc-related
-    const intent = s.intent_evaluated_against;
-    return intent.type === 'express_misc' || intent.type === 'defend_misc';
-  });
-
-  if (!noTransitions) return false;
-
-  // Check if the misconception state hasn't changed
+  // Check if misconception states haven't changed in last 3 scored turns
   const miscIntents = recentScores
     .map(s => s.intent_evaluated_against)
     .filter(i => i.type === 'express_misc' || i.type === 'defend_misc') as Array<{ type: string; misc_id: string }>;
 
   if (miscIntents.length >= 2) {
     const miscId = miscIntents[0].misc_id;
-    const allSameMisc = miscIntents.every(i => i.misc_id === miscId);
-    if (allSameMisc) return true;
+    if (miscIntents.every(i => i.misc_id === miscId)) return true;
   }
 
   return false;

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 type Message = { role: 'system' | 'user' | 'assistant'; content: string };
+type LLMRole = 'student' | 'judge' | 'grader';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -13,13 +14,18 @@ function getHeaders(): Record<string, string> {
   };
 }
 
-function getModels(role: 'student' | 'judge'): string[] {
+function getModels(role: LLMRole): string[] {
   if (role === 'student') {
-    const primary = process.env.STUDENT_MODEL || 'qwen/qwen3-235b-a22b:free';
-    return [primary, 'openrouter/free'];
+    const primary = process.env.STUDENT_MODEL || 'qwen/qwen3.5-plus-20260420';
+    return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-flash-02-23'];
   }
-  const primary = process.env.JUDGE_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
-  return [primary, 'google/gemma-3-27b-it:free', 'openrouter/free'];
+  // Grader uses the stronger model — needs to understand context well
+  if (role === 'grader') {
+    return ['qwen/qwen3.5-plus-20260420', 'qwen/qwen3.6-plus', 'qwen/qwen3.6-flash'];
+  }
+  // Judge (coach, synth, preteach, audit) — cheaper model is fine
+  const primary = process.env.JUDGE_MODEL || 'qwen/qwen3.5-flash-02-23';
+  return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-27b'];
 }
 
 function sleep(ms: number): Promise<void> {
@@ -28,7 +34,7 @@ function sleep(ms: number): Promise<void> {
 
 export async function callLLM(
   messages: Message[],
-  role: 'student' | 'judge',
+  role: LLMRole,
 ): Promise<string> {
   const models = getModels(role);
   const maxRetries = models.length * 2; // Each model gets 2 chances
@@ -37,20 +43,34 @@ export async function callLLM(
     // Cycle through models on retries
     const model = models[attempt % models.length];
 
+    const body_payload: Record<string, unknown> = {
+      model,
+      messages,
+      temperature: role === 'student' ? 0.8 : 0.3,
+      max_tokens: role === 'student' ? 500 : 1500,
+    };
+    // Grader needs some reasoning to follow conditional transition logic
+    // Judge (coach, synth) can work without reasoning
+    if (role === 'judge') {
+      body_payload.reasoning = { effort: 'none' };
+    } else if (role === 'grader') {
+      body_payload.reasoning = { effort: 'low' };
+    }
+
     const res = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: role === 'student' ? 0.8 : 0.3,
-        max_tokens: role === 'student' ? 500 : 1000,
-      }),
+      body: JSON.stringify(body_payload),
     });
 
     if (res.ok) {
       const data = await res.json();
-      const content = data.choices?.[0]?.message?.content || '';
+      const msg = data.choices?.[0]?.message;
+      // Some models put content in reasoning when thinking is on
+      const content = msg?.content || msg?.reasoning || '';
+      if (!content) {
+        console.warn(`Empty content from ${model}. Message keys:`, msg ? Object.keys(msg) : 'null', 'Full:', JSON.stringify(msg).slice(0, 300));
+      }
       return content;
     }
 
@@ -83,26 +103,70 @@ export async function callLLM(
   throw new Error('All retry attempts exhausted due to rate limiting');
 }
 
+function extractJSON(raw: string): Record<string, unknown> | null {
+  // Try parsing the whole response first (model returned pure JSON)
+  try {
+    const parsed = JSON.parse(raw.trim());
+    if (typeof parsed === 'object' && parsed !== null) return parsed;
+  } catch {}
+
+  // Find JSON blocks by matching balanced braces
+  const candidates: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === '{') {
+      let depth = 0;
+      for (let j = i; j < raw.length; j++) {
+        if (raw[j] === '{') depth++;
+        else if (raw[j] === '}') depth--;
+        if (depth === 0) {
+          candidates.push(raw.slice(i, j + 1));
+          break;
+        }
+      }
+    }
+  }
+
+  // Try candidates from largest to smallest (response JSON is usually the biggest)
+  candidates.sort((a, b) => b.length - a.length);
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (typeof parsed === 'object' && parsed !== null) return parsed;
+    } catch {}
+  }
+
+  return null;
+}
+
 export async function callJSONValidated<T>(
   messages: Message[],
-  role: 'student' | 'judge',
+  role: LLMRole,
   schema: z.ZodSchema<T>,
   maxRetries = 2,
 ): Promise<T> {
+  let lastRaw = '';
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const raw = await callLLM(messages, role);
-    // Try to extract JSON from the response
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
+    lastRaw = raw;
+    // Try to extract JSON — find all candidate {} blocks and try each
+    const parsed = extractJSON(raw);
+    if (parsed !== null) {
       try {
-        const parsed = JSON.parse(jsonMatch[0]);
         const result = schema.parse(parsed);
         return result;
       } catch (e) {
+        console.warn(`JSON validation failed (attempt ${attempt + 1}). Keys:`, Object.keys(parsed), 'Sample:', JSON.stringify(parsed).slice(0, 300));
+        // Log state_transition specifically if present (common failure point)
+        if ('state_transition' in parsed) {
+          console.warn('  state_transition value:', JSON.stringify(parsed.state_transition));
+        }
         if (attempt === maxRetries) throw e;
       }
-    } else if (attempt === maxRetries) {
-      throw new Error(`No JSON found in LLM response after ${maxRetries + 1} attempts`);
+    } else {
+      console.warn(`No JSON found (attempt ${attempt + 1}), raw:`, raw.slice(0, 300));
+      if (attempt === maxRetries) {
+        throw new Error(`No JSON found in LLM response after ${maxRetries + 1} attempts. Last raw: ${lastRaw.slice(0, 200)}`);
+      }
     }
   }
   throw new Error('Unreachable');
@@ -110,7 +174,7 @@ export async function callJSONValidated<T>(
 
 export async function streamLLM(
   messages: Message[],
-  role: 'student' | 'judge',
+  role: LLMRole,
 ): Promise<ReadableStream<Uint8Array>> {
   const models = getModels(role);
   let res: Response | null = null;

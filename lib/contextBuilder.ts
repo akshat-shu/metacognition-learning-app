@@ -42,7 +42,7 @@ export function buildGraderMessages(
   const intentDesc = describeIntent(lastIntent);
   const messages: Message[] = [
     { role: 'system', content: `Subject: ${session.brief.subject}\nScenario: ${session.brief.scenario}` },
-    { role: 'system', content: buildGradePrompt(intentDesc) },
+    { role: 'system', content: buildGradePrompt(intentDesc, session.miscStates, lastIntent, session.brief.misconceptions) },
   ];
 
   // Last 4 turns as context
