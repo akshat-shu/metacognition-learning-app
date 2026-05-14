@@ -6,7 +6,6 @@
   "/api/preteach/init/route": "/api/preteach/init",
   "/api/session/end/route": "/api/session/end",
   "/api/session/start/route": "/api/session/start",
-  "/favicon.ico/route": "/favicon.ico",
   "/page": "/",
   "/preteach/[briefId]/page": "/preteach/[briefId]",
   "/recap/[id]/page": "/recap/[id]",

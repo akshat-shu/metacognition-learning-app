@@ -95,12 +95,6 @@
       "regex": "^/api/session/start(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/session/start(?:/)?$"
-    },
-    {
-      "page": "/favicon.ico",
-      "regex": "^/favicon\\.ico(?:/)?$",
-      "routeKeys": {},
-      "namedRegex": "^/favicon\\.ico(?:/)?$"
     }
   ],
   "dataRoutes": [],
