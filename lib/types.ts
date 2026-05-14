@@ -61,6 +61,7 @@ export type Session = {
   lastCoachTurn: number;
   startedAt: number;
   endedAt?: number;
+  reflection?: string;
 };
 
 export type Turn = {

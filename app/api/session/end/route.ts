@@ -6,13 +6,16 @@ import { buildSynthMessages } from '@/lib/contextBuilder';
 
 export async function POST(req: NextRequest) {
   try {
-    const { sessionId } = await req.json();
+    const { sessionId, reflection } = await req.json();
     const session = getSession(sessionId);
     if (!session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
     session.endedAt = Date.now();
+    if (typeof reflection === 'string' && reflection.trim().length > 0) {
+      session.reflection = reflection.trim();
+    }
 
     const messages = buildSynthMessages(session);
     const synthesis = await callJSONValidated(messages, 'judge', SynthesisResultSchema);
