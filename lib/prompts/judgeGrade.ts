@@ -25,6 +25,13 @@ Score the user's NEW message 1-5 on these dimensions (be strict — 3 is average
   - express_misc/defend_misc: attempting correction = high, accepting wrong claim = low
   - probe_minor/trap: catching error = 5, missing it = 1-2
   - transfer_check: evaluating = high, ignoring = neutral
+  - **Confidence markers**: the user may prefix their message with
+    "[I'm guessing]", "[I think so]", or "[I'm sure]". This is their
+    claimed confidence. Penalize miscalibration:
+      - "[I'm sure]" but the move is weak or wrong → 1-2 (overconfident)
+      - "[I'm guessing]" but the move is actually sharp → 2-3 (under-claimed; missed opportunity to commit)
+      - Marker matches outcome (sure-and-right, or guessing-and-genuinely-tentative) → 4-5
+    No marker = score calibration on the move alone, ignore this rule.
 
 Emoticon (overall session vibe): delighted | happy | neutral | concerned | sad
 
