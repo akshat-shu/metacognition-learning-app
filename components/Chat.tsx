@@ -27,9 +27,18 @@ type Props = {
   onEnd: () => void;
 };
 
+type Confidence = 'guessing' | 'thinking' | 'sure' | null;
+
+const CONFIDENCE_TAGS: Record<Exclude<Confidence, null>, string> = {
+  guessing: '[I’m guessing]',
+  thinking: '[I think so]',
+  sure: '[I’m sure]',
+};
+
 export default function Chat({ sessionId, initialMessages, personaName, subject, onMeta, onEnd }: Props) {
   const [messages, setMessages] = useState<Turn[]>(initialMessages);
   const [input, setInput] = useState('');
+  const [confidence, setConfidence] = useState<Confidence>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [hintLoading, setHintLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -44,8 +53,10 @@ export default function Chat({ sessionId, initialMessages, personaName, subject,
 
   const sendMessage = async () => {
     if (!input.trim() || isStreaming) return;
-    const userMessage = input.trim();
+    const trimmed = input.trim();
+    const userMessage = confidence ? `${CONFIDENCE_TAGS[confidence]} ${trimmed}` : trimmed;
     setInput('');
+    setConfidence(null);
 
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
@@ -165,6 +176,29 @@ export default function Chat({ sessionId, initialMessages, personaName, subject,
 
       {/* Input */}
       <div className="p-4 border-t border-gray-200 bg-white">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs text-gray-400 mr-1">How confident?</span>
+          {(['guessing', 'thinking', 'sure'] as const).map(level => {
+            const active = confidence === level;
+            const label = level === 'guessing' ? "I'm guessing" : level === 'thinking' ? "I think so" : "I'm sure";
+            return (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setConfidence(active ? null : level)}
+                disabled={isStreaming}
+                className={
+                  'px-2.5 py-1 text-xs rounded-full border transition-colors ' +
+                  (active
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50')
+                }
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
         <div className="flex gap-2">
           <input
             type="text"

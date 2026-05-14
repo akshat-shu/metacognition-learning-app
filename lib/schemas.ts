@@ -60,11 +60,27 @@ export const CoachResultSchema = z.object({
   type: z.enum(['stuck', 'hint_request', 'transfer_check']),
 });
 
-export const PreteachResultSchema = z.object({
+export const PreteachResultSchema = z.preprocess((val) => {
+  if (typeof val !== 'object' || val === null) return val;
+  const obj = val as Record<string, unknown>;
+  // Normalize known model typos / aliases for concept_primer
+  if (obj.concept_primer === undefined) {
+    const alias =
+      obj.concept_prider ??
+      obj.conceptPrimer ??
+      obj.concept_intro ??
+      obj.concept_summary ??
+      obj.primer;
+    if (alias !== undefined) {
+      return { ...obj, concept_primer: alias };
+    }
+  }
+  return obj;
+}, z.object({
   concept_primer: z.string().min(50).max(1500),
   misconception_preview: z.string().min(30).max(800),
   strategy_options: z.array(z.string().max(50)).length(4),
-});
+}));
 
 export const AuditResultSchema = z.object({
   approve: z.boolean(),
