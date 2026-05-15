@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import styles from './PreteachFlow.module.css';
 
 type Props = {
   conceptPrimer: string;
@@ -17,7 +18,7 @@ export default function PreteachFlow({
   onComplete,
   loading,
 }: Props) {
-  const [screen, setScreen] = useState(0);
+  const [screen, setScreen]     = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
 
   const toggleStrategy = (s: string) => {
@@ -28,15 +29,12 @@ export default function PreteachFlow({
 
   if (screen === 0) {
     return (
-      <div className="max-w-xl mx-auto p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Before you teach</h2>
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mt-4">
-          <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{conceptPrimer}</p>
+      <div className={styles.container}>
+        <h2 className={styles.heading}>Before you teach</h2>
+        <div className={styles.card}>
+          <p className={styles.prose}>{conceptPrimer}</p>
         </div>
-        <button
-          onClick={() => setScreen(1)}
-          className="mt-6 w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
-        >
+        <button onClick={() => setScreen(1)} className={styles.continueBtn}>
           I get it, continue
         </button>
       </div>
@@ -45,12 +43,12 @@ export default function PreteachFlow({
 
   if (screen === 1) {
     return (
-      <div className="max-w-xl mx-auto p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">What you&apos;re walking into</h2>
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mt-4">
-          <p className="text-gray-700 leading-relaxed mb-4">{misconceptionPreview}</p>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-blue-800 text-sm font-medium">
+      <div className={styles.container}>
+        <h2 className={styles.heading}>What you&apos;re walking into</h2>
+        <div className={styles.card}>
+          <p className={styles.prose}>{misconceptionPreview}</p>
+          <div className={styles.infoBox}>
+            <p className={styles.infoText}>
               Sam will mostly reason correctly. Sometimes they&apos;ll have misconceptions.
               Sometimes they&apos;ll be confidently wrong about side details.{' '}
               <strong>Don&apos;t over-correct. Don&apos;t under-challenge.</strong>{' '}
@@ -58,10 +56,7 @@ export default function PreteachFlow({
             </p>
           </div>
         </div>
-        <button
-          onClick={() => setScreen(2)}
-          className="mt-6 w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
-        >
+        <button onClick={() => setScreen(2)} className={styles.continueBtn}>
           Got it
         </button>
       </div>
@@ -69,19 +64,15 @@ export default function PreteachFlow({
   }
 
   return (
-    <div className="max-w-xl mx-auto p-6">
-      <h2 className="text-2xl font-bold text-gray-800 mb-2">Pick your approach</h2>
-      <p className="text-gray-500 text-sm mb-4">Choose 1-2 teaching strategies</p>
-      <div className="grid grid-cols-2 gap-3 mt-4">
+    <div className={styles.container}>
+      <h2 className={styles.heading}>Pick your approach</h2>
+      <p className={styles.subheading}>Choose 1–2 teaching strategies</p>
+      <div className={styles.grid}>
         {strategyOptions.map(s => (
           <button
             key={s}
             onClick={() => toggleStrategy(s)}
-            className={`p-4 rounded-xl border-2 text-sm font-medium transition-all ${
-              selected.includes(s)
-                ? 'border-blue-500 bg-blue-50 text-blue-700'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-            }`}
+            className={`${styles.strategyBtn} ${selected.includes(s) ? styles.strategyBtnSelected : ''}`}
           >
             {s}
           </button>
@@ -90,9 +81,9 @@ export default function PreteachFlow({
       <button
         onClick={() => onComplete(selected)}
         disabled={selected.length === 0 || loading}
-        className="mt-6 w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className={styles.continueBtn}
       >
-        {loading ? 'Starting session...' : 'Start session'}
+        {loading ? 'Starting session…' : 'Start session'}
       </button>
     </div>
   );

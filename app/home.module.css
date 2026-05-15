@@ -1,0 +1,192 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.inner {
+  max-width: 540px;
+  width: 100%;
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* Hero text */
+.heading {
+  font-family: var(--font-heading);
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  line-height: 1.15;
+}
+.subheading {
+  color: var(--text-muted);
+  font-size: 1rem;
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+
+/* Card shell */
+.card {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-light);
+  margin-bottom: 24px;
+}
+.cardHeading {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.cardSub {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+
+/* Fields */
+.fieldLabel {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+.input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  background: var(--bg-page);
+  font-family: var(--font-body);
+  transition: border-color var(--transition-fast),
+              box-shadow    var(--transition-fast);
+  outline: none;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+}
+.input::placeholder { color: var(--text-placeholder); }
+.input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.input:disabled { opacity: 0.5; }
+
+.textarea {
+  font-family: var(--font-mono);
+  resize: vertical;
+  min-height: 100px;
+}
+
+/* Toggle sources link */
+.toggleBtn {
+  font-size: 0.8rem;
+  color: var(--primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 10px;
+  transition: color var(--transition-fast);
+}
+.toggleBtn:hover { color: var(--primary-hover); text-decoration: underline; }
+
+/* Checkbox */
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  user-select: none;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+/* Error */
+.error {
+  font-size: 0.75rem;
+  color: var(--danger);
+  margin-top: 2px;
+  margin-bottom: 8px;
+}
+
+/* Primary CTA */
+.primaryBtn {
+  width: 100%;
+  padding: 12px;
+  background: var(--primary);
+  color: #fff;
+  border-radius: var(--radius);
+  border: none;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform 80ms;
+  margin-top: 4px;
+}
+.primaryBtn:hover:not(:disabled) { background: var(--primary-hover); }
+.primaryBtn:active:not(:disabled) { transform: scale(0.98); }
+.primaryBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Section label above brief list */
+.sectionLabel {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+/* Brief cards */
+.briefList { display: flex; flex-direction: column; gap: 12px; }
+.briefCard {
+  display: block;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-light);
+  text-decoration: none;
+  transition: box-shadow var(--transition),
+              border-color var(--transition),
+              transform    var(--transition);
+}
+.briefCard:hover {
+  box-shadow: var(--shadow);
+  border-color: var(--primary-light);
+  transform: translateY(-2px);
+}
+.briefSubject {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.briefScenario {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.briefTags {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.tagBase {
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-weight: 500;
+}
+.tagMisc    { background: var(--primary-light); color: var(--primary);     }
+.tagPersona { background: var(--purple-bg);     color: var(--purple-text); }

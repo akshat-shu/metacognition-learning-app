@@ -1,0 +1,234 @@
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.heading {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* ── Section ──────────────────────────────────── */
+.sectionHeading {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.sectionSub {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  line-height: 1.55;
+}
+
+/* ── Dimension cards ──────────────────────────── */
+.dimList { display: flex; flex-direction: column; gap: 12px; }
+.dimCard {
+  background: var(--bg-surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  border: 1px solid var(--border-light);
+  transition: box-shadow var(--transition);
+}
+.dimCard:hover { box-shadow: var(--shadow-sm); }
+
+.dimCardRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 3px;
+}
+.dimLabel {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.dimScore { font-size: 0.8125rem; color: var(--text-muted); }
+.dimScorePrimary { color: var(--primary); font-weight: 600; }
+
+.dimHint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+/* Slider */
+.range { width: 100%; accent-color: var(--primary); }
+
+/* Progress bar */
+.bar {
+  position: relative;
+  width: 100%;
+  background: var(--bg-surface-alt);
+  border-radius: var(--radius-pill);
+  height: 10px;
+  margin-bottom: 6px;
+}
+.barFill {
+  background: var(--primary);
+  height: 10px;
+  border-radius: var(--radius-pill);
+  transition: width 600ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.barMarker {
+  position: absolute;
+  top: 0;
+  height: 10px;
+  width: 3px;
+  background: var(--text-secondary);
+  border-radius: var(--radius-pill);
+}
+
+.gapText { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Reveal button */
+.revealBtn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--primary);
+  color: #fff;
+  border-radius: var(--radius);
+  border: none;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform 80ms;
+}
+.revealBtn:hover { background: var(--primary-hover); }
+.revealBtn:active { transform: scale(0.98); }
+
+.takeaway {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.75;
+  margin-top: 16px;
+}
+
+/* ── Moments ──────────────────────────────────── */
+.momentList { display: flex; flex-direction: column; gap: 8px; }
+.moment {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+}
+.momentBreakthrough  { background: var(--success-bg);  border-color: var(--success-border); color: var(--success-text);  }
+.momentCaughtProbe   { background: var(--teal-bg);     border-color: var(--teal-border);    color: var(--teal-text);     }
+.momentGoodQuestion  { background: var(--info-bg);     border-color: var(--info-border);    color: var(--info-text);     }
+.momentMissedProbe   { background: #fff3e6; border-color: #f0c898; color: #7a4d10; }
+.momentOverCorrection{ background: #fffbe6; border-color: #f0d878; color: #705818; }
+.momentRegression    { background: var(--danger-bg);   border-color: var(--danger-border);  color: var(--danger-text);   }
+.momentDefault       { background: var(--bg-surface-alt); border-color: var(--border); color: var(--text-secondary); }
+
+.momentTypeRow {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 4px;
+}
+.momentType {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.momentTurn {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-left: 8px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.momentDesc { font-size: 0.8125rem; line-height: 1.55; }
+
+/* ── Reflection ───────────────────────────────── */
+.reflectionBox {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.reflectionQuote {
+  color: var(--warn-text);
+  font-size: 0.875rem;
+  font-style: italic;
+  line-height: 1.65;
+}
+.reflectionCoach {
+  color: #7a4d10;
+  font-size: 0.875rem;
+  border-top: 1px solid var(--warn-border);
+  padding-top: 12px;
+  line-height: 1.6;
+}
+.reflectionCoachLabel { font-weight: 600; }
+
+/* ── AI Literacy ──────────────────────────────── */
+.literacyBox {
+  background: var(--purple-bg);
+  border: 1px solid var(--purple-border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+}
+.literacySummary {
+  color: var(--purple-text);
+  font-size: 0.875rem;
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+.literacyMissedLabel {
+  color: var(--purple-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.missedList { display: flex; flex-direction: column; gap: 8px; }
+.missedItem {
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  border: 1px solid var(--purple-border);
+}
+.missedClaim { font-size: 0.875rem; color: var(--purple-text); }
+.missedClaimLabel { font-weight: 600; }
+.missedTruth {
+  font-size: 0.75rem;
+  color: var(--purple-text);
+  opacity: 0.8;
+  margin-top: 4px;
+}
+.literacySuccess {
+  color: var(--purple-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* ── Home button ──────────────────────────────── */
+.homeBtn {
+  width: 100%;
+  padding: 14px;
+  background: var(--text-primary);
+  color: #fff;
+  border-radius: var(--radius);
+  border: none;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform 80ms;
+}
+.homeBtn:hover { background: var(--text-secondary); }
+.homeBtn:active { transform: scale(0.98); }
