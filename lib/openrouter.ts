@@ -1,12 +1,7 @@
 import { z } from 'zod';
 
 type Message = { role: 'system' | 'user' | 'assistant'; content: string };
-type LLMRole = 'student' | 'judge' | 'grader' | 'briefGen';
-type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
-
-export type CallOptions = {
-  reasoningEffort?: ReasoningEffort;
-};
+type LLMRole = 'student' | 'judge' | 'grader';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -23,28 +18,6 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 //   briefGen  — ONCE per session, kicks off everything. Worth a reasoning model.
 //                deepseek-v4-pro ($0.44/$0.87 per M) + reasoning:medium.
 
-const STUDENT_FALLBACKS = [
-  'qwen/qwen3.6-flash',
-  'deepseek/deepseek-v4-flash-20260423',
-  'google/gemini-3.1-flash-lite-20260507',
-];
-
-const GRADER_FALLBACKS = [
-  'deepseek/deepseek-v4-flash-20260423',
-  'qwen/qwen3.6-flash',
-];
-
-const JUDGE_FALLBACKS = [
-  'google/gemini-3.1-flash-lite-20260507',
-  'qwen/qwen3.6-flash',
-  'google/gemma-4-26b-a4b-it-20260403',
-];
-
-const BRIEF_GEN_FALLBACKS = [
-  'deepseek/deepseek-v4-pro-20260423',
-  'moonshotai/kimi-k2.6-20260420',
-  'qwen/qwen3.6-flash',
-];
 
 function getHeaders(): Record<string, string> {
   return {
@@ -55,21 +28,18 @@ function getHeaders(): Record<string, string> {
   };
 }
 
-function dedupe(list: string[]): string[] {
-  return Array.from(new Set(list.filter(Boolean)));
-}
-
 function getModels(role: LLMRole): string[] {
   if (role === 'student') {
-    return dedupe([process.env.STUDENT_MODEL || STUDENT_FALLBACKS[0], ...STUDENT_FALLBACKS]);
+    const primary = process.env.STUDENT_MODEL || 'qwen/qwen3.5-plus-20260420';
+    return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-flash-02-23'];
   }
+  // Grader uses the stronger model — needs to understand context well
   if (role === 'grader') {
-    return dedupe([process.env.GRADER_MODEL || GRADER_FALLBACKS[0], ...GRADER_FALLBACKS]);
+    return ['qwen/qwen3.5-plus-20260420', 'qwen/qwen3.6-plus', 'qwen/qwen3.6-flash'];
   }
-  if (role === 'briefGen') {
-    return dedupe([process.env.BRIEF_GEN_MODEL || BRIEF_GEN_FALLBACKS[0], ...BRIEF_GEN_FALLBACKS]);
-  }
-  return dedupe([process.env.JUDGE_MODEL || JUDGE_FALLBACKS[0], ...JUDGE_FALLBACKS]);
+  // Judge (coach, synth, preteach, audit) — cheaper model is fine
+  const primary = process.env.JUDGE_MODEL || 'qwen/qwen3.5-flash-02-23';
+  return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-27b'];
 }
 
 function sleep(ms: number): Promise<void> {
@@ -79,7 +49,8 @@ function sleep(ms: number): Promise<void> {
 export async function callLLM(
   messages: Message[],
   role: LLMRole,
-  opts?: CallOptions,
+  maxTokens?: number,
+  reasoningEffort?: string,
 ): Promise<string> {
   const models = getModels(role);
   const maxRetries = models.length * 2; // Each model gets 2 chances
@@ -91,28 +62,21 @@ export async function callLLM(
     const body_payload: Record<string, unknown> = {
       model,
       messages,
-      temperature: role === 'student' ? 0.8 : role === 'briefGen' ? 0.6 : 0.3,
-      // briefGen produces a full JSON brief AND may emit reasoning tokens — need
-      // generous headroom or the response truncates mid-thought.
-      max_tokens: role === 'student' ? 500 : role === 'briefGen' ? 8000 : 1500,
+      temperature: role === 'student' ? 0.8 : 0.3,
+      max_tokens: maxTokens ?? (role === 'student' ? 500 : 1500),
     };
-    // Per-function reasoning effort: caller can override, otherwise use role default
-    const effort = opts?.reasoningEffort
-      ?? (role === 'grader'
-        ? 'low'
-        : role === 'judge'
-          ? 'none'
-          : role === 'briefGen'
-            ? 'low'
-            : undefined);
-    if (effort) {
+    // reasoningEffort param overrides role defaults
+    const effort = reasoningEffort ?? (role === 'judge' ? 'none' : role === 'grader' ? 'low' : undefined);
+    if (effort !== undefined) {
       body_payload.reasoning = { effort };
     }
 
+    const serialized = JSON.stringify(body_payload);
+    console.log(`[callLLM] attempt=${attempt} model=${model} bodyLen=${serialized.length} key=${process.env.OPENROUTER_API_KEY?.slice(-8)}`);
     const res = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify(body_payload),
+      body: serialized,
     });
 
     if (res.ok) {
@@ -121,7 +85,7 @@ export async function callLLM(
       // Some models put content in reasoning when thinking is on
       const content = msg?.content || msg?.reasoning || '';
       if (!content) {
-        console.warn(`Empty content from ${model}. Message keys:`, msg ? Object.keys(msg) : 'null', 'Full:', JSON.stringify(msg).slice(0, 300));
+        console.warn(`Empty content from ${model}. Message keys:`, msg ? Object.keys(msg) : 'null', 'Full:', JSON.stringify(msg ?? null).slice(0, 300));
       }
       return content;
     }
@@ -190,83 +154,30 @@ function extractJSON(raw: string): Record<string, unknown> | null {
   return null;
 }
 
-// --- Levenshtein key normalization (Fix 1) ---
-function levenshtein(a: string, b: string): number {
-  const m = a.length, n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
-    [i, ...Array(n).fill(0)]
-  );
-  for (let j = 1; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
-    }
-  }
-  return dp[m][n];
-}
-
-function normalizeKeys(obj: unknown, expectedKeys: string[]): unknown {
-  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return obj;
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-    if (expectedKeys.includes(key)) {
-      result[key] = value;
-      continue;
-    }
-    const match = expectedKeys
-      .map(e => ({ key: e, dist: levenshtein(key, e) }))
-      .filter(x => x.dist > 0 && x.dist <= 2)
-      .sort((a, b) => a.dist - b.dist)[0];
-    if (match && !(match.key in result)) {
-      console.warn(`[KeyNorm] Corrected "${key}" → "${match.key}" (dist ${match.dist})`);
-      result[match.key] = value;
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
-
-function getExpectedKeys(schema: z.ZodSchema): string[] {
-  try {
-    const shape = (schema as any)?._def?.shape?.() || (schema as any)?._def?.shape || {};
-    return Object.keys(shape);
-  } catch {
-    return [];
-  }
-}
-
 export async function callJSONValidated<T>(
   messages: Message[],
   role: LLMRole,
   schema: z.ZodSchema<T>,
   maxRetries = 2,
-  opts?: CallOptions,
+  options?: number | { maxTokens?: number; reasoningEffort?: string },
 ): Promise<T> {
-  const expectedKeys = getExpectedKeys(schema);
+  const maxTokens = typeof options === 'number' ? options : options?.maxTokens;
+  const reasoningEffort = typeof options === 'object' ? options?.reasoningEffort : undefined;
   let lastRaw = '';
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const raw = await callLLM(messages, role, opts);
+    const raw = await callLLM(messages, role, maxTokens, reasoningEffort);
     lastRaw = raw;
+    // Try to extract JSON — find all candidate {} blocks and try each
     const parsed = extractJSON(raw);
     if (parsed !== null) {
-      // Normalize keys before validation (catches concept_prider → concept_primer etc.)
-      const normalized = expectedKeys.length > 0
-        ? normalizeKeys(parsed, expectedKeys) as Record<string, unknown>
-        : parsed;
       try {
-        const result = schema.parse(normalized);
+        const result = schema.parse(parsed);
         return result;
       } catch (e) {
-        console.warn(`JSON validation failed (attempt ${attempt + 1}). Keys:`, Object.keys(normalized), 'Sample:', JSON.stringify(normalized).slice(0, 300));
-        if ('state_transitions' in normalized) {
-          console.warn('  state_transitions value:', JSON.stringify(normalized.state_transitions));
-        } else if ('state_transition' in normalized) {
-          console.warn('  state_transition value:', JSON.stringify(normalized.state_transition));
+        console.warn(`JSON validation failed (attempt ${attempt + 1}). Keys:`, Object.keys(parsed), 'Sample:', JSON.stringify(parsed).slice(0, 300));
+        // Log state_transition specifically if present (common failure point)
+        if ('state_transition' in parsed) {
+          console.warn('  state_transition value:', JSON.stringify(parsed.state_transition));
         }
         if (attempt === maxRetries) throw e;
       }
@@ -379,6 +290,7 @@ export async function* streamStudentTokens(messages: Message[]): AsyncGenerator<
         temperature: 0.8,
         max_tokens: 500,
         stream: true,
+        reasoning: { effort: 'none' },
       }),
     });
 
