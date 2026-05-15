@@ -189,13 +189,10 @@ export default function SessionPage() {
         {coachNudge && (
           <CoachCard
             nudge={coachNudge.nudge}
-<<<<<<< HEAD
+
             trigger={(coachNudge.trigger || 'stuck') as 'soft_nudge' | 'stuck' | 'reasoning_weak' | 'hint_request' | 'transfer_check'}
             intensity={(coachNudge.intensity || 'firm') as 'soft' | 'firm' | 'directive'}
-=======
-            trigger={(coachNudge.trigger ?? 'stuck') as any}
-            intensity={(coachNudge.intensity ?? 'firm') as any}
->>>>>>> ashwin
+
             onDismiss={() => setCoachNudge(null)}
           />
         )}
