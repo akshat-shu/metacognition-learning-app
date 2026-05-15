@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import styles from './PreteachFlow.module.css';
+import Prose from './Prose';
 
 type Props = {
   conceptPrimer: string;
@@ -32,7 +33,7 @@ export default function PreteachFlow({
       <div className={styles.container}>
         <h2 className={styles.heading}>Before you teach</h2>
         <div className={styles.card}>
-          <p className={styles.prose}>{conceptPrimer}</p>
+          <Prose text={conceptPrimer} />
         </div>
         <button onClick={() => setScreen(1)} className={styles.continueBtn}>
           I get it, continue
@@ -46,7 +47,7 @@ export default function PreteachFlow({
       <div className={styles.container}>
         <h2 className={styles.heading}>What you&apos;re walking into</h2>
         <div className={styles.card}>
-          <p className={styles.prose}>{misconceptionPreview}</p>
+          <Prose text={misconceptionPreview} />
           <div className={styles.infoBox}>
             <p className={styles.infoText}>
               Sam will mostly reason correctly. Sometimes they&apos;ll have misconceptions.

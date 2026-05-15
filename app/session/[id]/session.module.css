@@ -3,29 +3,77 @@
   height: 100vh;
   display: flex;
   overflow: hidden;
+  user-select: none; /* prevent text selection while dragging */
 }
+
+/* On mobile: chat takes full width, side panel hidden */
 .chatPane {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border-light);
   overflow: hidden;
 }
 .sidePanel {
   display: none;
 }
 
+/* ── Resize handle ───────────────────────────────── */
+.resizeHandle {
+  display: none;
+}
+
 @media (min-width: 1024px) {
-  .chatPane   { width: 60%; }
-  .sidePanel  {
+  /* Chat pane fills all space not claimed by handle + side panel */
+  .chatPane {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /* Drag handle */
+  .resizeHandle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 8px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: var(--border-light);
+    transition: background var(--transition-fast);
+    position: relative;
+    z-index: 10;
+  }
+  .resizeHandle:hover,
+  .resizeHandle.dragging {
+    background: var(--primary-light);
+  }
+  /* Drag grip dots */
+  .resizeHandle::after {
+    content: '';
+    display: block;
+    width: 3px;
+    height: 32px;
+    border-left: 1.5px dotted var(--text-muted);
+    border-right: 1.5px dotted var(--text-muted);
+    border-radius: 2px;
+    opacity: 0.5;
+  }
+  .resizeHandle:hover::after,
+  .resizeHandle.dragging::after {
+    opacity: 1;
+  }
+
+  .sidePanel {
     display: flex;
     flex-direction: column;
-    width: 40%;
+    flex: 0 0 auto;
     padding: 24px;
     gap: 20px;
     overflow-y: auto;
     background: var(--bg-surface-alt);
-    border-left: 1px solid var(--border-light);
+    border-left: none;
+    min-width: 220px;
+    max-width: 600px;
   }
 }
 

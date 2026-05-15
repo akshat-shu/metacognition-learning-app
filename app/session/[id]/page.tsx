@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Chat from '@/components/Chat';
 import EmoticonFace from '@/components/EmoticonFace';
@@ -24,6 +24,10 @@ type SessionData = {
   };
 };
 
+const SIDE_MIN = 220; // px
+const SIDE_MAX = 600; // px
+const SIDE_DEFAULT_PCT = 38; // % of viewport
+
 export default function SessionPage() {
   const params    = useParams();
   const router    = useRouter();
@@ -39,6 +43,40 @@ export default function SessionPage() {
   const [showReflection, setShowReflection] = useState(false);
   const [reflection, setReflection]         = useState('');
   const [submittingEnd, setSubmittingEnd]   = useState(false);
+
+  // ── Resizable sidebar ──────────────────────────
+  const [sideWidthPx, setSideWidthPx] = useState<number | null>(null); // null = use CSS default
+  const [isDragging, setIsDragging]   = useState(false);
+  const dragStartX   = useRef(0);
+  const dragStartW   = useRef(0);
+  const pageRef      = useRef<HTMLElement>(null);
+
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    // Resolve current pixel width if we're still using the percentage default
+    const panel = pageRef.current?.querySelector('[data-side-panel]') as HTMLElement | null;
+    const currentW = panel ? panel.offsetWidth : Math.round(window.innerWidth * SIDE_DEFAULT_PCT / 100);
+    dragStartX.current = e.clientX;
+    dragStartW.current = currentW;
+    setIsDragging(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const onMove = (e: MouseEvent) => {
+      // Dragging handle leftward → side grows; rightward → side shrinks
+      const delta = dragStartX.current - e.clientX;
+      const next  = Math.min(SIDE_MAX, Math.max(SIDE_MIN, dragStartW.current + delta));
+      setSideWidthPx(next);
+    };
+    const onUp = () => setIsDragging(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup',  onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup',  onUp);
+    };
+  }, [isDragging]);
 
   useEffect(() => {
     const stored = sessionStorage.getItem(`session_${sessionId}`);
@@ -97,9 +135,14 @@ export default function SessionPage() {
   const { brief } = sessionData.session;
   const initialMessages = sessionData.session.turns.map(t => ({ role: t.role, content: t.content }));
 
+  // Side panel width: use measured px if dragged, else let CSS percentage handle it
+  const sidePanelStyle = sideWidthPx !== null
+    ? { width: sideWidthPx + 'px' }
+    : { width: `${SIDE_DEFAULT_PCT}%` };
+
   return (
-    <main className={styles.page}>
-      {/* Chat — 60% */}
+    <main ref={pageRef} className={styles.page}>
+      {/* Chat pane — fills remaining space */}
       <div className={styles.chatPane}>
         <Chat
           sessionId={sessionId}
@@ -111,8 +154,19 @@ export default function SessionPage() {
         />
       </div>
 
-      {/* Side panel — 40% */}
-      <div className={styles.sidePanel}>
+      {/* Drag handle */}
+      <div
+        className={`${styles.resizeHandle} ${isDragging ? styles.dragging : ''}`}
+        onMouseDown={onDragStart}
+        title="Drag to resize"
+      />
+
+      {/* Side panel */}
+      <div
+        data-side-panel
+        className={styles.sidePanel}
+        style={sidePanelStyle}
+      >
         <EmoticonFace emoticon={emoticon} tag={tag} />
 
         {stateTransitions.length > 0 && (
