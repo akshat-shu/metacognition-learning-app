@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       ? session.turnIntents[session.turnIntents.length - 1]
       : { type: 'honest_reason' };
 
-    let gradeResult;
+    let gradeResult: any;
     try {
       const graderMessages = buildGraderMessages(session, userMessage, lastIntent);
       gradeResult = await callJSONValidated(graderMessages, 'grader', GradeResultSchema);
@@ -65,10 +65,25 @@ export async function POST(req: NextRequest) {
     // 4. Apply state transitions (now supports multiple per turn)
     console.log(`[Chat] Grader result — tag: "${gradeResult.tag}", scores: ${JSON.stringify(gradeResult.scores)}, transitions: ${JSON.stringify(gradeResult.state_transitions)}`);
     const regressionEvents: Array<{ misc_id: string; belief: string; reason: string }> = [];
+    const avgScore = (gradeResult.scores.reasoning + gradeResult.scores.questions) / 2;
     for (const transition of gradeResult.state_transitions) {
+      const isRegression = getStateIndex(transition.to as any) < getStateIndex(transition.from as any);
+
+      // GUARD: Block regressions when teaching quality is decent (avg reasoning+questions >= 2.5)
+      if (isRegression && avgScore >= 2.5) {
+        console.log(`[Chat] BLOCKED REGRESSION: ${transition.misc_id} ${transition.from} → ${transition.to} (avg score ${avgScore} too high for regression)`);
+        continue;
+      }
+
+      // GUARD: Verify the "from" state matches actual current state (grader may hallucinate)
+      const actualState = session.miscStates[transition.misc_id];
+      if (actualState && actualState !== transition.from) {
+        console.log(`[Chat] BLOCKED TRANSITION: ${transition.misc_id} grader says from="${transition.from}" but actual="${actualState}"`);
+        continue;
+      }
+
       console.log(`[Chat] STATE CHANGE: ${transition.misc_id} ${transition.from} → ${transition.to}`);
-      // Detect regression
-      if (getStateIndex(transition.to as any) < getStateIndex(transition.from as any)) {
+      if (isRegression) {
         const belief = session.brief.misconceptions.find(m => m.id === transition.misc_id)?.belief || '';
         regressionEvents.push({ misc_id: transition.misc_id, belief, reason: transition.reason });
         console.log(`[Chat] REGRESSION: ${transition.misc_id} went backwards`);

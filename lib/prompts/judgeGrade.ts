@@ -54,15 +54,14 @@ ${buildTransitionGuidance(intentObj, miscStates, misconceptions)}
 Tag: 2-4 words describing the user's message.
 Evidence: one sentence on what triggered the scores.
 
-Respond with ONLY valid JSON. Emit 0, 1, or more state transitions if the user's move affects misconceptions. Match transition frequency to teaching quality — consistently strong teaching should produce steady state advancement, not stagnation.
+## REGRESSION RULES
+Regressions (moving a state BACKWARDS) are RARE and should ONLY happen when the user EXPLICITLY agrees with or validates a wrong belief. Good teaching NEVER causes regression. Probing questions, thought experiments, and analogies are ADVANCES, not regressions. If the user's scores are >= 3 on reasoning or questions, a regression is almost certainly wrong.
 
-When NO state change: {"scores":{"framing":3,"questions":3,"reasoning":3,"uncertainty":3,"calibration":3},"emoticon":"neutral","tag":"example","evidence":"example","state_transitions":[]}
+Respond with ONLY valid JSON. Each transition MUST have all four fields: misc_id, from, to, reason. Transitions should ONLY advance states forward, except in the rare case described above.
 
-When ONE state changes: {"scores":{"framing":4,"questions":4,"reasoning":4,"uncertainty":3,"calibration":4},"emoticon":"happy","tag":"good probing","evidence":"User asked targeted question","state_transitions":[{"misc_id":"heavier-faster","from":"entrenched","to":"aware","reason":"User asked probing question about mass vs weight"}]}
+Example (no change): {"scores":{"framing":3,"questions":3,"reasoning":3,"uncertainty":3,"calibration":3},"emoticon":"neutral","tag":"example","evidence":"example","state_transitions":[]}
 
-When MULTIPLE states change: {"scores":{...},"emoticon":"happy","tag":"broad correction","evidence":"...","state_transitions":[{"misc_id":"heavier-faster","from":"entrenched","to":"aware","reason":"..."},{"misc_id":"force-equals-acceleration","from":"entrenched","to":"aware","reason":"..."}]}
-
-IMPORTANT: Each transition MUST have all four fields: misc_id, from, to, reason. Do NOT omit misc_id.`;
+Example (advance): {"scores":{"framing":4,"questions":4,"reasoning":4,"uncertainty":3,"calibration":4},"emoticon":"happy","tag":"good probing","evidence":"User asked targeted question","state_transitions":[{"misc_id":"heavier-faster","from":"entrenched","to":"aware","reason":"User asked probing question about mass vs weight"}]}`;
 }
 
 function buildTransitionGuidance(
@@ -81,21 +80,20 @@ function buildTransitionGuidance(
     const misc = misconceptions.find(x => x.id === miscId);
     const depth = misc?.depth ?? 3;
     const thresholds = getTransitionThresholds(current, depth);
-    return `CRITICAL — you MUST evaluate transition for "${miscId}" (currently "${current}", depth ${depth}/5):
+    return `MANDATORY EVALUATION for "${miscId}" (currently "${current}", depth ${depth}/5):
 
-State transitions reflect the QUALITY OF THE USER'S TEACHING ATTEMPT, not the student's response. If the user teaches well, ADVANCE the state even before the student responds. The student's acceptance is modeled separately.
+State transitions reflect the QUALITY OF THE USER'S TEACHING ATTEMPT. If the user teaches well, ADVANCE the state. You MUST only emit transitions for "${miscId}" — do NOT emit transitions for other misconceptions on this turn.
 
 ${getStateContext(current)}
 
-Rules (check the user's scores, then decide):
-- If questions >= ${thresholds.questions} (user asked a probing question): ADVANCE to "${next}"
-- If reasoning >= ${thresholds.reasoning} (user gave evidence/example/analogy): ADVANCE to "${next}"
-- If the user just made flat assertions with no reasoning or questions: NO transition
-- If the user accepted/agreed with the wrong belief: REGRESS one step
+DECISION RULE — apply mechanically based on scores:
+- If questions >= ${thresholds.questions} → EMIT ADVANCE to "${next}"
+- If reasoning >= ${thresholds.reasoning} → EMIT ADVANCE to "${next}"
+- If BOTH questions < ${thresholds.questions} AND reasoning < ${thresholds.reasoning} → no transition
+- Regression requires the user to EXPLICITLY agree the wrong belief is correct (extremely rare)
 
-You MUST output one of these two options:
-  ADVANCE: {"misc_id":"${miscId}","from":"${current}","to":"${next}","reason":"brief explanation"}
-  NO CHANGE: null`;
+You MUST include exactly one transition for "${miscId}" if either threshold is met:
+  {"misc_id":"${miscId}","from":"${current}","to":"${next}","reason":"brief explanation"}`;
   }
 
   if (intent.type === 'transfer_check' && miscStates[intent.misc_id] === 'updating') {
