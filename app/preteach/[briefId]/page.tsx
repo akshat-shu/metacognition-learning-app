@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import PreteachFlow from '@/components/PreteachFlow';
+import styles from './preteach.module.css';
 
 export default function PreteachPage() {
-  const params = useParams();
-  const router = useRouter();
+  const params  = useParams();
+  const router  = useRouter();
   const briefId = params.briefId as string;
 
   const [preteachData, setPreteachData] = useState<{
@@ -14,10 +15,12 @@ export default function PreteachPage() {
     misconception_preview: string;
     strategy_options: string[];
   } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]   = useState(true);
   const [starting, setStarting] = useState(false);
+
   const [error, setError] = useState('');
   const initiated = useRef(false);
+
 
   const fetchedRef = useRef(false);
 
@@ -36,7 +39,7 @@ export default function PreteachPage() {
         const data = await res.json();
         setPreteachData(data);
       } catch (e: any) {
-        setError(e.message || 'Failed to load');
+        setError(e.message ?? 'Failed to load');
       } finally {
         setLoading(false);
       }
@@ -54,21 +57,20 @@ export default function PreteachPage() {
       });
       if (!res.ok) throw new Error('Failed to start session');
       const data = await res.json();
-      // Store session data in sessionStorage for the session page
       sessionStorage.setItem(`session_${data.sessionId}`, JSON.stringify(data));
       router.push(`/session/${data.sessionId}`);
     } catch (e: any) {
-      setError(e.message || 'Failed to start session');
+      setError(e.message ?? 'Failed to start session');
       setStarting(false);
     }
   };
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-gray-500 mt-4">Preparing your session...</p>
+      <main className={styles.page}>
+        <div className={styles.loadingCenter}>
+          <div className={styles.spinner} />
+          <p className={styles.loadingText}>Preparing your session…</p>
         </div>
       </main>
     );
@@ -76,13 +78,10 @@ export default function PreteachPage() {
 
   if (error) {
     return (
-      <main className="min-h-screen flex items-center justify-center p-6">
-        <div className="text-center">
-          <p className="text-red-500 mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg"
-          >
+      <main className={styles.page}>
+        <div className={styles.errorCenter}>
+          <p className={styles.errorText}>{error}</p>
+          <button onClick={() => window.location.reload()} className={styles.retryBtn}>
             Retry
           </button>
         </div>
@@ -93,7 +92,7 @@ export default function PreteachPage() {
   if (!preteachData) return null;
 
   return (
-    <main className="min-h-screen flex items-center justify-center">
+    <main className={styles.page}>
       <PreteachFlow
         conceptPrimer={preteachData.concept_primer}
         misconceptionPreview={preteachData.misconception_preview}
