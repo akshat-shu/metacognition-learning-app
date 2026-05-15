@@ -1,84 +1,94 @@
-export type Misconception = {
-  id: string;
-  belief: string;
-  depth: 1 | 2 | 3 | 4 | 5;
-  surface_when: string;
-};
-
 export type Brief = {
   id: string;
   subject: string;
   scenario: string;
   persona: { name: string; age: number; vibe: string };
   misconceptions: Misconception[];
+  probe_claims: ProbeClaim[];
+  trap_claims: TrapClaim[];
+  honest_topics: string[];
   objectives: string[];
+  preteach_focus: string;
 };
 
-export type Turn = {
-  role: "user" | "student";
-  content: string;
-  timestamp: number;
+export type Misconception = {
+  id: string;
+  belief: string;
+  depth: 1 | 2 | 3 | 4 | 5;
+  surface_when: string;
+  can_probe: boolean;
 };
 
-export type EmoticonState =
-  | "delighted"
-  | "happy"
-  | "neutral"
-  | "concerned"
-  | "sad";
-
-export type TurnScore = {
-  turnIndex: number;
-  scores: {
-    framing: number;
-    questions: number;
-    reasoning: number;
-    uncertainty: number;
-  };
-  emoticon: EmoticonState;
-  tag: string;
-  evidence: string;
+export type ProbeClaim = {
+  id: string;
+  claim: string;
+  truth: string;
+  context_hint: string;
+  difficulty: 'easy' | 'medium' | 'hard';
 };
 
-export type RecapMoment = {
-  turn_index: number;
-  type: "breakthrough" | "missed_opportunity" | "pivot" | "stumble";
-  summary: string;
-  why_it_mattered: string;
-  try_next_time: string;
+export type TrapClaim = {
+  id: string;
+  claim: string;
+  truth: string;
+  context_hint: string;
 };
 
-export type SessionRecap = {
-  moments: RecapMoment[];
-  summary: {
-    averages: {
-      framing: number;
-      questions: number;
-      reasoning: number;
-      uncertainty: number;
-    };
-    trend: "improving" | "flat" | "declining";
-    takeaway: string;
-  };
-};
+export type MisconceptionState = 'entrenched' | 'aware' | 'considering' | 'updating' | 'settled';
 
-export type RollingSummary = {
-  uptoTurn: number;
-  summary: string;
-};
+export type TurnIntent =
+  | { type: 'honest_reason' }
+  | { type: 'honest_question' }
+  | { type: 'honest_partial' }
+  | { type: 'express_misc'; misc_id: string }
+  | { type: 'defend_misc'; misc_id: string }
+  | { type: 'probe_minor'; probe_id: string }
+  | { type: 'probe_trap'; trap_id: string }
+  | { type: 'transfer_check'; misc_id: string };
+
+export type SamMode = 'curious' | 'pushback' | 'hedging' | 'tangent' | 'fake_agreement' | 'tired' | 'asking_back';
 
 export type Session = {
   id: string;
   brief: Brief;
   turns: Turn[];
   scores: TurnScore[];
-  rollups: RollingSummary[];
+  miscStates: Record<string, MisconceptionState>;
+  strategyChoices: string[];
+  consumedProbes: Set<string>;
+  turnIntents: TurnIntent[];
+  coachNudgeCount: number;
+  lastCoachTurn: number;
   startedAt: number;
   endedAt?: number;
-  recap?: SessionRecap;
+  reflection?: string;
 };
 
-export type ChatMessage = {
-  role: "system" | "user" | "assistant";
+export type CoachTrigger = 'soft_nudge' | 'stuck' | 'reasoning_weak' | 'hint_request' | 'transfer_check';
+
+export type TurnTrace = {
+  orchestratorWeights?: Record<string, number>;
+  orchestratorPicked?: string;
+  graderRawScores?: { framing: number; questions: number; reasoning: number; uncertainty: number; calibration: number };
+  coachTrigger?: CoachTrigger;
+  stateBeforeTurn?: Record<string, MisconceptionState>;
+  stateAfterTurn?: Record<string, MisconceptionState>;
+};
+
+export type Turn = {
+  role: 'user' | 'student';
   content: string;
+  timestamp: number;
+  intent?: TurnIntent;
+  mode?: SamMode;
+  trace?: TurnTrace;
+};
+
+export type TurnScore = {
+  turnIndex: number;
+  scores: { framing: number; questions: number; reasoning: number; uncertainty: number; calibration: number };
+  emoticon: 'delighted' | 'happy' | 'neutral' | 'concerned' | 'sad';
+  tag: string;
+  evidence: string;
+  intent_evaluated_against: TurnIntent;
 };

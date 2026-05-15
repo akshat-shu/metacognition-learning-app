@@ -1,204 +1,346 @@
-import type { ZodType } from "zod";
+import { z } from 'zod';
 
-import type { ChatMessage } from "@/lib/types";
+type Message = { role: 'system' | 'user' | 'assistant'; content: string };
+type LLMRole = 'student' | 'judge' | 'grader';
 
-type OpenRouterChoice = {
-  message?: { content?: string };
-};
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-type OpenRouterResponse = {
-  choices?: OpenRouterChoice[];
-};
+// Model selection map — verified against openrouter.ai/api/v1/models on 2026-05-15.
+// Budget targeting ~$50 over ~4 days, ~30-50 sessions. Per-session totals stay <$0.05
+// on the defaults below; see commit message for the cost arithmetic.
+//
+//   student   — every turn, streamed. Flash-tier mandatory.
+//                qwen3.6-flash ($0.19/$1.13 per M) — solid persona-following, fast.
+//   grader    — every turn, JSON, conditional logic. Cheap reasoning model.
+//                deepseek-v4-flash ($0.13/$0.25 per M) + reasoning:low.
+//   judge     — synth/coach/audit/preteach. One-shot, low stakes.
+//                gemini-3.1-flash-lite ($0.25/$1.5 per M) — fast + cheap.
+//   briefGen  — ONCE per session, kicks off everything. Worth a reasoning model.
+//                deepseek-v4-pro ($0.44/$0.87 per M) + reasoning:medium.
 
-export type OpenRouterArgs = {
-  model: string;
-  messages: ChatMessage[];
-  jsonMode?: boolean;
-  temperature?: number;
-};
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-
-function getOpenRouterHeaders(): Record<string, string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENROUTER_API_KEY is not set.");
-  }
+function getHeaders(): Record<string, string> {
   return {
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json",
-    "HTTP-Referer": process.env.APP_URL ?? "http://localhost:3000",
-    "X-Title": "Reverse Tutor",
+    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    'Content-Type': 'application/json',
+    'HTTP-Referer': process.env.APP_URL || 'http://localhost:3000',
+    'X-Title': 'Reverse Tutor',
   };
 }
 
-function cleanupJSON(raw: string): string {
-  return raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+function getModels(role: LLMRole): string[] {
+  if (role === 'student') {
+    const primary = process.env.STUDENT_MODEL || 'qwen/qwen3.5-plus-20260420';
+    return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-flash-02-23'];
+  }
+  // Grader uses the stronger model — needs to understand context well
+  if (role === 'grader') {
+    return ['qwen/qwen3.5-plus-20260420', 'qwen/qwen3.6-plus', 'qwen/qwen3.6-flash'];
+  }
+  // Judge (coach, synth, preteach, audit) — cheaper model is fine
+  const primary = process.env.JUDGE_MODEL || 'qwen/qwen3.5-flash-02-23';
+  return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-27b'];
 }
 
-export async function callOpenRouter({
-  model,
-  messages,
-  jsonMode = false,
-  temperature = 0.7,
-}: OpenRouterArgs): Promise<string> {
-  const res = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: getOpenRouterHeaders(),
-    body: JSON.stringify({
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export async function callLLM(
+  messages: Message[],
+  role: LLMRole,
+  maxTokens?: number,
+  reasoningEffort?: string,
+): Promise<string> {
+  const models = getModels(role);
+  const maxRetries = models.length * 2; // Each model gets 2 chances
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    // Cycle through models on retries
+    const model = models[attempt % models.length];
+
+    const body_payload: Record<string, unknown> = {
       model,
       messages,
-      temperature,
-      ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
-    }),
-  });
+      temperature: role === 'student' ? 0.8 : 0.3,
+      max_tokens: maxTokens ?? (role === 'student' ? 500 : 1500),
+    };
+    // reasoningEffort param overrides role defaults
+    const effort = reasoningEffort ?? (role === 'judge' ? 'none' : role === 'grader' ? 'low' : undefined);
+    if (effort !== undefined) {
+      body_payload.reasoning = { effort };
+    }
 
-  if (!res.ok) {
-    throw new Error(`OpenRouter ${res.status}: ${await res.text()}`);
+    const serialized = JSON.stringify(body_payload);
+    console.log(`[callLLM] attempt=${attempt} model=${model} bodyLen=${serialized.length} key=${process.env.OPENROUTER_API_KEY?.slice(-8)}`);
+    const res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: serialized,
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const msg = data.choices?.[0]?.message;
+      // Some models put content in reasoning when thinking is on
+      const content = msg?.content || msg?.reasoning || '';
+      if (!content) {
+        console.warn(`Empty content from ${model}. Message keys:`, msg ? Object.keys(msg) : 'null', 'Full:', JSON.stringify(msg ?? null).slice(0, 300));
+      }
+      return content;
+    }
+
+    const body = await res.text();
+
+    // 429 rate limit — wait and retry with next model
+    if (res.status === 429) {
+      let waitSeconds = 5 * (attempt + 1);
+      try {
+        const parsed = JSON.parse(body);
+        const retryAfter = parsed?.error?.metadata?.retry_after_seconds;
+        if (retryAfter && typeof retryAfter === 'number') {
+          waitSeconds = Math.min(retryAfter + 1, 30);
+        }
+      } catch {}
+      console.warn(`Rate limited on ${model}, waiting ${waitSeconds}s before retry ${attempt + 1}/${maxRetries}...`);
+      await sleep(waitSeconds * 1000);
+      continue;
+    }
+
+    // 404 model not found — skip to next model immediately
+    if (res.status === 404) {
+      console.warn(`Model ${model} not found, trying next fallback...`);
+      continue;
+    }
+
+    throw new Error(`OpenRouter error (${res.status}): ${body}`);
   }
 
-  const data = (await res.json()) as OpenRouterResponse;
-  const content = data.choices?.[0]?.message?.content;
-  if (typeof content !== "string") {
-    throw new Error("OpenRouter response missing message content.");
+  throw new Error('All retry attempts exhausted due to rate limiting');
+}
+
+function extractJSON(raw: string): Record<string, unknown> | null {
+  // Try parsing the whole response first (model returned pure JSON)
+  try {
+    const parsed = JSON.parse(raw.trim());
+    if (typeof parsed === 'object' && parsed !== null) return parsed;
+  } catch {}
+
+  // Find JSON blocks by matching balanced braces
+  const candidates: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === '{') {
+      let depth = 0;
+      for (let j = i; j < raw.length; j++) {
+        if (raw[j] === '{') depth++;
+        else if (raw[j] === '}') depth--;
+        if (depth === 0) {
+          candidates.push(raw.slice(i, j + 1));
+          break;
+        }
+      }
+    }
   }
-  return content;
+
+  // Try candidates from largest to smallest (response JSON is usually the biggest)
+  candidates.sort((a, b) => b.length - a.length);
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (typeof parsed === 'object' && parsed !== null) return parsed;
+    } catch {}
+  }
+
+  return null;
 }
 
 export async function callJSONValidated<T>(
-  args: OpenRouterArgs,
-  schema: ZodType<T>,
-  retries = 1,
+  messages: Message[],
+  role: LLMRole,
+  schema: z.ZodSchema<T>,
+  maxRetries = 2,
+  options?: number | { maxTokens?: number; reasoningEffort?: string },
 ): Promise<T> {
-  let currentArgs = args;
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    try {
-      const raw = await callOpenRouter({ ...currentArgs, jsonMode: true });
-      const parsed = JSON.parse(cleanupJSON(raw));
-      return schema.parse(parsed);
-    } catch (error) {
-      if (attempt === retries) {
-        throw error;
+  const maxTokens = typeof options === 'number' ? options : options?.maxTokens;
+  const reasoningEffort = typeof options === 'object' ? options?.reasoningEffort : undefined;
+  let lastRaw = '';
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const raw = await callLLM(messages, role, maxTokens, reasoningEffort);
+    lastRaw = raw;
+    // Try to extract JSON — find all candidate {} blocks and try each
+    const parsed = extractJSON(raw);
+    if (parsed !== null) {
+      try {
+        const result = schema.parse(parsed);
+        return result;
+      } catch (e) {
+        console.warn(`JSON validation failed (attempt ${attempt + 1}). Keys:`, Object.keys(parsed), 'Sample:', JSON.stringify(parsed).slice(0, 300));
+        // Log state_transition specifically if present (common failure point)
+        if ('state_transition' in parsed) {
+          console.warn('  state_transition value:', JSON.stringify(parsed.state_transition));
+        }
+        if (attempt === maxRetries) throw e;
       }
-      currentArgs = {
-        ...currentArgs,
-        messages: [
-          ...currentArgs.messages,
-          {
-            role: "system",
-            content:
-              "Your previous response was not valid JSON matching the required schema. Respond with ONLY valid JSON. No markdown, no prose, no comments.",
-          },
-        ],
-      };
+    } else {
+      console.warn(`No JSON found (attempt ${attempt + 1}), raw:`, raw.slice(0, 300));
+      if (attempt === maxRetries) {
+        throw new Error(`No JSON found in LLM response after ${maxRetries + 1} attempts. Last raw: ${lastRaw.slice(0, 200)}`);
+      }
     }
   }
-  throw new Error("JSON validation retries exhausted.");
+  throw new Error('Unreachable');
 }
 
-export async function streamOpenRouter(
-  args: OpenRouterArgs,
-  onToken: (token: string) => void,
-): Promise<string> {
-  const res = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: getOpenRouterHeaders(),
-    body: JSON.stringify({
-      model: args.model,
-      messages: args.messages,
-      temperature: args.temperature ?? 0.7,
-      stream: true,
-    }),
-  });
+export async function streamLLM(
+  messages: Message[],
+  role: LLMRole,
+): Promise<ReadableStream<Uint8Array>> {
+  const models = getModels(role);
+  let res: Response | null = null;
 
-  if (!res.ok || !res.body) {
-    throw new Error(`OpenRouter stream ${res.status}: ${await res.text()}`);
+  for (let attempt = 0; attempt < models.length * 2; attempt++) {
+    const model = models[attempt % models.length];
+    const r = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: role === 'student' ? 0.8 : 0.3,
+        max_tokens: 500,
+        stream: true,
+      }),
+    });
+
+    if (r.ok) { res = r; break; }
+
+    if (r.status === 429) {
+      const waitSeconds = 5 * (attempt + 1);
+      console.warn(`Stream rate limited on ${model}, waiting ${waitSeconds}s...`);
+      await sleep(waitSeconds * 1000);
+      continue;
+    }
+
+    if (r.status === 404) {
+      console.warn(`Stream model ${model} not found, trying next fallback...`);
+      continue;
+    }
+
+    const err = await r.text();
+    throw new Error(`OpenRouter stream error (${r.status}): ${err}`);
   }
 
-  const reader = res.body.getReader();
+  if (!res) throw new Error('All stream retry attempts exhausted');
+
+  const reader = res.body!.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
-  let full = "";
-  let lastMessageContent = "";
+  const encoder = new TextEncoder();
+
+  return new ReadableStream({
+    async pull(controller) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          return;
+        }
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') {
+              controller.close();
+              return;
+            }
+            try {
+              const json = JSON.parse(data);
+              const content = json.choices?.[0]?.delta?.content;
+              if (content) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+              }
+            } catch {
+              // Skip unparseable chunks
+            }
+          }
+        }
+      }
+    },
+  });
+}
+
+// Convenience: call student and collect full response (for opener, etc.)
+export async function callStudent(messages: Message[]): Promise<string> {
+  return callLLM(messages, 'student');
+}
+
+// Stream student response — yields chunks as they arrive, returns full content via callback
+export async function* streamStudentTokens(messages: Message[]): AsyncGenerator<string, string> {
+  const models = getModels('student');
+  let res: Response | null = null;
+
+  for (let attempt = 0; attempt < models.length * 2; attempt++) {
+    const model = models[attempt % models.length];
+    const r = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.8,
+        max_tokens: 500,
+        stream: true,
+        reasoning: { effort: 'none' },
+      }),
+    });
+
+    if (r.ok) { res = r; break; }
+
+    if (r.status === 429) {
+      const waitSeconds = 5 * (attempt + 1);
+      console.warn(`Stream rate limited on ${model}, waiting ${waitSeconds}s...`);
+      await sleep(waitSeconds * 1000);
+      continue;
+    }
+    if (r.status === 404) {
+      console.warn(`Stream model ${model} not found, trying next...`);
+      continue;
+    }
+    const err = await r.text();
+    throw new Error(`OpenRouter stream error (${r.status}): ${err}`);
+  }
+
+  if (!res) throw new Error('All stream retry attempts exhausted');
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullContent = '';
 
   while (true) {
-    const { value, done } = await reader.read();
-    if (done) {
-      break;
-    }
-
+    const { done, value } = await reader.read();
+    if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    while (true) {
-      const delimiterIndex = buffer.indexOf("\n\n");
-      if (delimiterIndex === -1) {
-        break;
-      }
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
 
-      const eventBlock = buffer.slice(0, delimiterIndex);
-      buffer = buffer.slice(delimiterIndex + 2);
-
-      const lines = eventBlock
-        .split("\n")
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice("data:".length).trim());
-
-      for (const line of lines) {
-        if (line === "[DONE]") {
-          return full;
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') return fullContent;
+      try {
+        const delta = JSON.parse(data).choices?.[0]?.delta?.content;
+        if (delta) {
+          fullContent += delta;
+          yield delta;
         }
-        let parsed:
-          | {
-              choices?: Array<{
-                delta?: { content?: string };
-                message?: { content?: string };
-                text?: string;
-              }>;
-            }
-          | undefined;
-        try {
-          parsed = JSON.parse(line) as {
-            choices?: Array<{
-              delta?: { content?: string };
-              message?: { content?: string };
-              text?: string;
-            }>;
-          };
-        } catch {
-          continue;
-        }
-
-        const choice = parsed.choices?.[0];
-        let token = choice?.delta?.content;
-        if (typeof token !== "string" || token.length === 0) {
-          token = choice?.text;
-        }
-        if ((typeof token !== "string" || token.length === 0) && choice?.message?.content) {
-          const messageContent = choice.message.content;
-          if (messageContent.startsWith(lastMessageContent)) {
-            token = messageContent.slice(lastMessageContent.length);
-          } else {
-            token = messageContent;
-          }
-          lastMessageContent = messageContent;
-        }
-
-        if (typeof token === "string" && token.length > 0) {
-          full += token;
-          onToken(token);
-        }
-      }
+      } catch {}
     }
   }
 
-  return full;
+  return fullContent;
 }
 
-export function isNoEndpointError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  return (
-    error.message.includes(" 404:") &&
-    error.message.toLowerCase().includes("no endpoints found")
-  );
+export async function callJudge(messages: Message[]): Promise<string> {
+  return callLLM(messages, 'judge');
 }

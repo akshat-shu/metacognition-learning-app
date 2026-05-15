@@ -1,100 +1,48 @@
-import type { Brief, Session, SessionRecap } from "@/lib/types";
+import { Session, Brief, MisconceptionState } from './types';
 
-const SESSION_ID_STORAGE_KEY = "reverse-tutor:session-id";
-const RECAP_STORAGE_PREFIX = "reverse-tutor:recap:";
+// In-memory store (server-side only)
+const sessions = new Map<string, Session>();
 
-type GlobalSessionStore = typeof globalThis & {
-  __reverseTutorSessions__?: Map<string, Session>;
-};
-
-const globalStore = globalThis as GlobalSessionStore;
-
-function sessionMap(): Map<string, Session> {
-  if (!globalStore.__reverseTutorSessions__) {
-    globalStore.__reverseTutorSessions__ = new Map<string, Session>();
+export function createSession(brief: Brief, strategyChoices: string[]): Session {
+  const miscStates: Record<string, MisconceptionState> = {};
+  for (const m of brief.misconceptions) {
+    miscStates[m.id] = 'entrenched';
   }
-  return globalStore.__reverseTutorSessions__;
-}
 
-export function createSessionId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `session-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`;
-}
-
-export function getSession(sessionId: string): Session | undefined {
-  return sessionMap().get(sessionId);
-}
-
-export function getOrCreateSession(sessionId: string, brief: Brief): Session {
-  const existing = sessionMap().get(sessionId);
-  if (existing) {
-    return existing;
-  }
-  const created: Session = {
-    id: sessionId,
+  const session: Session = {
+    id: generateId(),
     brief,
     turns: [],
     scores: [],
-    rollups: [],
+    miscStates,
+    strategyChoices,
+    consumedProbes: new Set(),
+    turnIntents: [],
+    coachNudgeCount: 0,
+    lastCoachTurn: -10,
     startedAt: Date.now(),
   };
-  sessionMap().set(sessionId, created);
-  return created;
+
+  sessions.set(session.id, session);
+  return session;
+}
+
+export function getSession(id: string): Session | undefined {
+  return sessions.get(id);
 }
 
 export function saveSession(session: Session): void {
-  sessionMap().set(session.id, session);
+  sessions.set(session.id, session);
 }
 
-export function setSessionRecap(sessionId: string, recap: SessionRecap): void {
-  const session = sessionMap().get(sessionId);
-  if (!session) {
-    console.warn(`Cannot store recap: session ${sessionId} not found.`);
-    return;
-  }
-  session.recap = recap;
-  session.endedAt = Date.now();
-  sessionMap().set(sessionId, session);
+function generateId(): string {
+  return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function getStoredSessionId(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  return window.localStorage.getItem(SESSION_ID_STORAGE_KEY);
-}
-
-export function setStoredSessionId(sessionId: string): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(SESSION_ID_STORAGE_KEY, sessionId);
-}
-
-export function storeRecap(sessionId: string, recap: SessionRecap): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(
-    `${RECAP_STORAGE_PREFIX}${sessionId}`,
-    JSON.stringify(recap),
-  );
-}
-
-export function readStoredRecap(sessionId: string): SessionRecap | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const raw = window.localStorage.getItem(`${RECAP_STORAGE_PREFIX}${sessionId}`);
-  if (!raw) {
-    return null;
-  }
-  try {
-    return JSON.parse(raw) as SessionRecap;
-  } catch (error) {
-    console.error(`Failed to parse recap for session ${sessionId}:`, error);
-    return null;
-  }
+// For API responses — serialize Set to array
+export function sessionToJSON(session: Session) {
+  return {
+    ...session,
+    consumedProbes: Array.from(session.consumedProbes),
+  };
 }

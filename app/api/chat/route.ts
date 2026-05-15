@@ -1,336 +1,214 @@
-import { z } from "zod";
+import { NextRequest } from 'next/server';
+import { getSession, saveSession } from '@/lib/session';
+import { callJSONValidated, streamStudentTokens, callStudent } from '@/lib/openrouter';
+import { GradeResultSchema, CoachResultSchema } from '@/lib/schemas';
+import { buildStudentMessages, buildGraderMessages, buildCoachMessages } from '@/lib/contextBuilder';
+import { pickIntent, pickMode, decideCoachTrigger } from '@/lib/orchestrator';
+import { applyTransition, getStateIndex } from '@/lib/stateMachine';
+import { TurnIntent, TurnTrace } from '@/lib/types';
 
-import {
-  buildAuditorMessages,
-  buildGraderMessages,
-  buildStudentMessages,
-  looksLikePromptInjection,
-  summarizedTurnTarget,
-} from "@/lib/contextBuilder";
-import { getBriefById } from "@/lib/briefs";
-import { AuditResultSchema, GradeResultSchema } from "@/lib/schemas";
-import { createSessionId, getOrCreateSession, saveSession } from "@/lib/session";
-import {
-  callJSONValidated,
-  callOpenRouter,
-  isNoEndpointError,
-  streamOpenRouter,
-} from "@/lib/openrouter";
-import type { ChatMessage, Session, TurnScore } from "@/lib/types";
-
-const ChatRequestSchema = z.object({
-  sessionId: z.string().optional(),
-  briefId: z.string().optional(),
-  userMessage: z.string().min(1),
-});
-
-const DEFAULT_STUDENT_MODEL = "openrouter/free";
-const STUDENT_MODEL = process.env.STUDENT_MODEL ?? DEFAULT_STUDENT_MODEL;
-const STUDENT_MODEL_FALLBACKS = (
-  process.env.STUDENT_MODEL_FALLBACKS ?? DEFAULT_STUDENT_MODEL
-)
-  .split(",")
-  .map((model) => model.trim())
-  .filter(Boolean);
-const JUDGE_MODEL =
-  process.env.JUDGE_MODEL ?? "meta-llama/llama-3.3-70b-instruct:free";
-const ENABLE_AUDITOR = process.env.ENABLE_AUDITOR === "true";
-const HARD_TURN_CAP = 50;
-const EMPTY_STUDENT_FALLBACK_MESSAGE =
-  "wait sorry, i blanked for a sec — can you ask that again?";
-
-type SSEEvent = "student_token" | "final" | "done" | "error";
-
-function sse(event: SSEEvent, payload: unknown): string {
-  return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
-}
-
-function chunkText(content: string, chunkSize = 14): string[] {
-  const chunks: string[] = [];
-  for (let i = 0; i < content.length; i += chunkSize) {
-    chunks.push(content.slice(i, i + chunkSize));
-  }
-  return chunks;
-}
-
-function studentModelCandidates(): string[] {
-  const candidates = [STUDENT_MODEL, ...STUDENT_MODEL_FALLBACKS];
-  const deduped = new Set<string>();
-  for (const candidate of candidates) {
-    deduped.add(candidate);
-  }
-  return [...deduped];
-}
-
-async function runWithStudentFallback<T>(
-  operation: (model: string) => Promise<T>,
-): Promise<T> {
-  const candidates = studentModelCandidates();
-  let lastError: unknown;
-
-  for (let index = 0; index < candidates.length; index += 1) {
-    const model = candidates[index];
-    try {
-      return await operation(model);
-    } catch (error) {
-      lastError = error;
-      if (isNoEndpointError(error) && index < candidates.length - 1) {
-        console.warn(
-          `Student model unavailable (${model}). Retrying with fallback ${candidates[index + 1]}.`,
-        );
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("All Student model candidates failed.");
-}
-
-async function summarizeTurns(session: Session): Promise<void> {
-  const target = summarizedTurnTarget(session.turns.length);
-  let summarized = session.rollups.at(-1)?.uptoTurn ?? 0;
-
-  while (summarized < target) {
-    const start = summarized;
-    const end = summarized + 10;
-    const chunk = session.turns.slice(start, end);
-
-    const messages: ChatMessage[] = [
-      {
-        role: "system",
-        content:
-          "Compress this conversation chunk into <=200 words. Preserve misconception reveals, breakthroughs, and tone shifts.",
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          turn_range: [start + 1, end],
-          turns: chunk,
-        }),
-      },
-    ];
-
-    try {
-      const summary = await callOpenRouter({
-        model: JUDGE_MODEL,
-        messages,
-        temperature: 0.2,
-      });
-      session.rollups.push({ uptoTurn: end, summary });
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "unknown";
-      session.rollups.push({
-        uptoTurn: end,
-        summary: `Summary unavailable for turns ${start + 1}-${end}: ${reason}`,
+export async function POST(req: NextRequest) {
+  try {
+    const { sessionId, userMessage } = await req.json();
+    const session = getSession(sessionId);
+    if (!session) {
+      return new Response(JSON.stringify({ error: 'Session not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
       });
     }
-    summarized = end;
-  }
-}
 
-async function gradeTurn(session: Session, userMessage: string) {
-  try {
-    return await callJSONValidated(
-      {
-        model: JUDGE_MODEL,
-        messages: buildGraderMessages(session, userMessage),
-        temperature: 0.2,
-      },
-      GradeResultSchema,
-      1,
-    );
-  } catch (error) {
-    console.error("Grader parse failure:", error);
-    return {
-      scores: { framing: 3, questions: 3, reasoning: 3, uncertainty: 3 },
-      emoticon: "neutral" as const,
-      tag: "—",
-      evidence: "",
-    };
-  }
-}
+    // 1. Capture state before turn, append user turn
+    const stateBeforeTurn = { ...session.miscStates };
+    session.turns.push({
+      role: 'user',
+      content: userMessage,
+      timestamp: Date.now(),
+    });
 
-async function auditDraft(session: Session, draft: string, reason?: string) {
-  try {
-    return await callJSONValidated(
-      {
-        model: JUDGE_MODEL,
-        messages: buildAuditorMessages(session, draft, reason),
-        temperature: 0.1,
-      },
-      AuditResultSchema,
-      1,
-    );
-  } catch (error) {
-    console.error("Auditor parse failure:", error);
-    return { approve: true, reason: "Auditor parse failed, default approve." };
-  }
-}
+    // 2. Grade user message against last Sam intent
+    const lastIntent: TurnIntent = session.turnIntents.length > 0
+      ? session.turnIntents[session.turnIntents.length - 1]
+      : { type: 'honest_reason' };
 
-async function generateStudentWithAuditor(session: Session): Promise<string> {
-  const baseMessages = buildStudentMessages(session);
-  let draft = await runWithStudentFallback((model) =>
-    callOpenRouter({
-      model,
-      messages: baseMessages,
-      temperature: 0.7,
-    }),
-  );
-  let audit = await auditDraft(session, draft);
-  let retries = 0;
-
-  while (!audit.approve && retries < 2) {
-    const retryMessages: ChatMessage[] = [
-      ...baseMessages,
-      {
-        role: "system",
-        content: `Your previous draft was rejected. Reason: ${audit.reason}. Write a new response that addresses this.`,
-      },
-    ];
-    draft = await runWithStudentFallback((model) =>
-      callOpenRouter({
-        model,
-        messages: retryMessages,
-        temperature: 0.7,
-      }),
-    );
-    retries += 1;
-    audit = await auditDraft(session, draft, audit.reason);
-  }
-
-  return draft;
-}
-
-export async function POST(request: Request) {
-  const body = await request.json();
-  const parsed = ChatRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return Response.json({ error: "Invalid chat request." }, { status: 400 });
-  }
-
-  const brief = getBriefById(parsed.data.briefId);
-  const sessionId = parsed.data.sessionId ?? createSessionId();
-  const session = getOrCreateSession(sessionId, brief);
-  const userTurns = session.turns.filter((turn) => turn.role === "user").length;
-
-  if (userTurns >= HARD_TURN_CAP) {
-    return Response.json(
-      {
-        hardCapReached: true,
-        sessionId: session.id,
-        message:
-          "This session has reached its 50-turn limit. Please end and start a new session.",
-      },
-      { status: 409 },
-    );
-  }
-
-  const userMessage = parsed.data.userMessage.trim();
-  session.turns.push({ role: "user", content: userMessage, timestamp: Date.now() });
-  if (looksLikePromptInjection(userMessage)) {
-    console.warn(`[PromptInjection][session=${session.id}] ${userMessage}`);
-  }
-
-  await summarizeTurns(session);
-
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const encoder = new TextEncoder();
-      const send = (event: SSEEvent, payload: unknown) => {
-        controller.enqueue(encoder.encode(sse(event, payload)));
+    let gradeResult;
+    try {
+      const graderMessages = buildGraderMessages(session, userMessage, lastIntent);
+      gradeResult = await callJSONValidated(graderMessages, 'grader', GradeResultSchema);
+    } catch (e) {
+      console.error('Grader failed, using defaults:', e);
+      gradeResult = {
+        scores: { framing: 3, questions: 3, reasoning: 3, uncertainty: 3, calibration: 3 },
+        emoticon: 'neutral' as const,
+        tag: 'processing',
+        evidence: 'Grader unavailable',
+        state_transitions: [],
       };
+    }
 
-      void (async () => {
+    // 3. Record score
+    session.scores.push({
+      turnIndex: session.turns.length - 1,
+      scores: gradeResult.scores,
+      emoticon: gradeResult.emoticon,
+      tag: gradeResult.tag,
+      evidence: gradeResult.evidence,
+      intent_evaluated_against: lastIntent,
+    });
+
+    // 3b. Calibration diagnostic logging
+    const calibrationScore = gradeResult.scores.calibration;
+    const expectedRange = getExpectedCalibrationRange(lastIntent);
+    const calibrationMatch = calibrationScore >= expectedRange.min && calibrationScore <= expectedRange.max;
+    console.log(`[Calibration] score=${calibrationScore}, intent=${lastIntent.type}, expected=${expectedRange.min}-${expectedRange.max}, match=${calibrationMatch}`);
+
+    // 4. Apply state transitions (now supports multiple per turn)
+    console.log(`[Chat] Grader result — tag: "${gradeResult.tag}", scores: ${JSON.stringify(gradeResult.scores)}, transitions: ${JSON.stringify(gradeResult.state_transitions)}`);
+    const regressionEvents: Array<{ misc_id: string; belief: string; reason: string }> = [];
+    for (const transition of gradeResult.state_transitions) {
+      console.log(`[Chat] STATE CHANGE: ${transition.misc_id} ${transition.from} → ${transition.to}`);
+      // Detect regression
+      if (getStateIndex(transition.to as any) < getStateIndex(transition.from as any)) {
+        const belief = session.brief.misconceptions.find(m => m.id === transition.misc_id)?.belief || '';
+        regressionEvents.push({ misc_id: transition.misc_id, belief, reason: transition.reason });
+        console.log(`[Chat] REGRESSION: ${transition.misc_id} went backwards`);
+      }
+      session.miscStates = applyTransition(session.miscStates, transition);
+    }
+    console.log(`[Chat] Current miscStates: ${JSON.stringify(session.miscStates)}`);
+
+    // 5. Orchestrator picks new intent
+    const newIntent = pickIntent(session);
+    const mode = pickMode(session);
+    console.log(`[Chat] New intent: ${newIntent.type}${('misc_id' in newIntent) ? ` (${newIntent.misc_id})` : ''}, mode: ${mode}`);
+
+    // 6. Mark consumed probes/traps
+    if (newIntent.type === 'probe_minor') {
+      session.consumedProbes.add((newIntent as { type: 'probe_minor'; probe_id: string }).probe_id);
+    } else if (newIntent.type === 'probe_trap') {
+      session.consumedProbes.add((newIntent as { type: 'probe_trap'; trap_id: string }).trap_id);
+    }
+
+    // 7. Build student messages and stream response
+    const studentMessages = buildStudentMessages(session, newIntent, mode);
+
+    // Use SSE streaming
+    const encoder = new TextEncoder();
+
+    const stream = new ReadableStream({
+      async start(controller) {
         try {
-          const graderPromise = gradeTurn(session, userMessage);
-          let studentReply = "";
-          const studentMessages = buildStudentMessages(session);
-
-          if (ENABLE_AUDITOR) {
-            studentReply = await generateStudentWithAuditor(session);
-            for (const chunk of chunkText(studentReply)) {
-              send("student_token", { token: chunk });
-            }
-          } else {
-            studentReply = await runWithStudentFallback((model) =>
-              streamOpenRouter(
-                {
-                  model,
-                  messages: studentMessages,
-                  temperature: 0.7,
-                },
-                (token) => {
-                  send("student_token", { token });
-                },
-              ),
+          // Stream student response token-by-token
+          let accumulated = '';
+          const tokenStream = streamStudentTokens(studentMessages);
+          for await (const chunk of tokenStream) {
+            accumulated += chunk;
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: 'content', content: chunk })}\n\n`)
             );
+          }
 
-            if (studentReply.trim().length === 0) {
-              console.warn(
-                "Student stream returned empty content. Falling back to non-stream completion.",
-              );
-              studentReply = await runWithStudentFallback((model) =>
-                callOpenRouter({
-                  model,
-                  messages: studentMessages,
-                  temperature: 0.7,
-                }),
-              );
-              if (studentReply.trim().length === 0) {
-                studentReply = EMPTY_STUDENT_FALLBACK_MESSAGE;
-              }
-              for (const chunk of chunkText(studentReply)) {
-                send("student_token", { token: chunk });
-              }
+          // 8. Append student turn with trace
+          const trace: TurnTrace = {
+            orchestratorWeights: (newIntent as any).__weights,
+            orchestratorPicked: (newIntent as any).__picked,
+            graderRawScores: gradeResult.scores,
+            stateBeforeTurn,
+            stateAfterTurn: { ...session.miscStates },
+          };
+          session.turns.push({
+            role: 'student',
+            content: accumulated.trim(),
+            timestamp: Date.now(),
+            intent: newIntent,
+            mode,
+            trace,
+          });
+          session.turnIntents.push(newIntent);
+
+          // 9. Check coach triggers (layered intervention)
+          let coachNudge = null;
+          const coachTrigger = decideCoachTrigger(session);
+          if (coachTrigger) {
+            try {
+              console.log(`[Chat] Coach triggered: ${coachTrigger}`);
+              const coachMessages = buildCoachMessages(session, coachTrigger);
+              coachNudge = await callJSONValidated(coachMessages, 'judge', CoachResultSchema, 2, { reasoningEffort: 'medium' });
+              session.coachNudgeCount++;
+              session.lastCoachTurn = session.turns.length;
+              // Record coach trigger in trace
+              if (trace) trace.coachTrigger = coachTrigger;
+            } catch (e) {
+              console.error('Coach failed:', e);
             }
           }
 
-          const grade = await graderPromise;
-          const turnScore: TurnScore = {
-            turnIndex: session.turns.length - 1,
-            scores: grade.scores,
-            emoticon: grade.emoticon,
-            tag: grade.tag,
-            evidence: grade.evidence,
-          };
-
-          session.turns.push({
-            role: "student",
-            content: studentReply,
-            timestamp: Date.now(),
-          });
-          session.scores.push(turnScore);
+          // 10. Save session
           saveSession(session);
 
-          send("final", {
-            sessionId: session.id,
-            emoticon: grade.emoticon,
-            tag: grade.tag,
-          });
-          send("done", { ok: true });
+          // 11. Send final metadata event
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({
+              type: 'meta',
+              scores: gradeResult.scores,
+              emoticon: gradeResult.emoticon,
+              tag: gradeResult.tag,
+              evidence: gradeResult.evidence,
+              state_transitions: gradeResult.state_transitions,
+              regressionEvents,
+              coachNudge,
+              miscStates: session.miscStates,
+              intent: newIntent.type,
+            })}\n\n`)
+          );
+
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
         } catch (error) {
-          console.error("Chat route error:", error);
-          send("error", {
-            message:
-              error instanceof Error
-                ? error.message
-                : "Something went wrong while generating the response.",
-          });
-        } finally {
+          console.error('Stream error:', error);
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: 'error', message: 'Failed to generate response' })}\n\n`)
+          );
           controller.close();
         }
-      })();
-    },
-  });
+      },
+    });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    },
-  });
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
+  } catch (error) {
+    console.error('Chat error:', error);
+    return new Response(JSON.stringify({ error: 'Chat failed' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+// Calibration diagnostic: expected score ranges per intent type
+function getExpectedCalibrationRange(intent: TurnIntent): { min: number; max: number } {
+  switch (intent.type) {
+    case 'probe_minor':
+    case 'probe_trap':
+      // If user caught the error → high, missed → low. Wide range expected.
+      return { min: 1, max: 5 };
+    case 'express_misc':
+    case 'defend_misc':
+      // Attempting correction → high, accepting wrong → low
+      return { min: 2, max: 5 };
+    case 'honest_reason':
+    case 'honest_question':
+    case 'honest_partial':
+      // Accepting/building on honest = high, over-correcting = low
+      return { min: 2, max: 5 };
+    case 'transfer_check':
+      return { min: 3, max: 5 };
+    default:
+      return { min: 2, max: 4 };
+  }
 }
