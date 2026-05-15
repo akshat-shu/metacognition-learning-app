@@ -82,12 +82,7 @@ export const GradeResultSchema = z.object({
   emoticon: z.enum(['delighted', 'happy', 'neutral', 'concerned', 'sad']),
   tag: z.string().transform(s => s.slice(0, 40)),
   evidence: z.string().transform(s => s.slice(0, 200)),
-  state_transition: z.object({
-    misc_id: z.string(),
-    from: z.enum(['entrenched','aware','considering','updating','settled']),
-    to: z.enum(['entrenched','aware','considering','updating','settled']),
-    reason: z.string(),
-  }).nullable(),
+  state_transitions: StateTransitionsSchema,
 });
 
 export const CoachResultSchema = z.object({
