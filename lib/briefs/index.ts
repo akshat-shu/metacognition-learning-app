@@ -11,18 +11,14 @@ export function getAllBriefs(): Brief[] {
   return Array.from(briefs.values());
 }
 
-export function registerBrief(brief: Brief): void {
+// Stores a learner-generated brief in the in-memory registry. Returns the id.
+export function registerBrief(brief: Brief): string {
   briefs.set(brief.id, brief);
+  return brief.id;
 }
 
 export function getBuiltInBriefs(): Brief[] {
   return [sampleBrief];
-}
-
-// Stores a learner-generated brief in the in-memory registry. Returns the id.
-export function registerBrief(brief: Brief): string {
-  briefs[brief.id] = brief;
-  return brief.id;
 }
 
 export function generateBriefId(): string {

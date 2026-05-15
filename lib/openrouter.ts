@@ -18,28 +18,6 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 //   briefGen  — ONCE per session, kicks off everything. Worth a reasoning model.
 //                deepseek-v4-pro ($0.44/$0.87 per M) + reasoning:medium.
 
-const STUDENT_FALLBACKS = [
-  'qwen/qwen3.6-flash',
-  'deepseek/deepseek-v4-flash-20260423',
-  'google/gemini-3.1-flash-lite-20260507',
-];
-
-const GRADER_FALLBACKS = [
-  'deepseek/deepseek-v4-flash-20260423',
-  'qwen/qwen3.6-flash',
-];
-
-const JUDGE_FALLBACKS = [
-  'google/gemini-3.1-flash-lite-20260507',
-  'qwen/qwen3.6-flash',
-  'google/gemma-4-26b-a4b-it-20260403',
-];
-
-const BRIEF_GEN_FALLBACKS = [
-  'deepseek/deepseek-v4-pro-20260423',
-  'moonshotai/kimi-k2.6-20260420',
-  'qwen/qwen3.6-flash',
-];
 
 function getHeaders(): Record<string, string> {
   return {
@@ -72,6 +50,7 @@ export async function callLLM(
   messages: Message[],
   role: LLMRole,
   maxTokens?: number,
+  reasoningEffort?: string,
 ): Promise<string> {
   const models = getModels(role);
   const maxRetries = models.length * 2; // Each model gets 2 chances
@@ -86,12 +65,10 @@ export async function callLLM(
       temperature: role === 'student' ? 0.8 : 0.3,
       max_tokens: maxTokens ?? (role === 'student' ? 500 : 1500),
     };
-    // Grader needs some reasoning to follow conditional transition logic
-    // Judge (coach, synth) can work without reasoning
-    if (role === 'judge') {
-      body_payload.reasoning = { effort: 'none' };
-    } else if (role === 'grader') {
-      body_payload.reasoning = { effort: 'low' };
+    // reasoningEffort param overrides role defaults
+    const effort = reasoningEffort ?? (role === 'judge' ? 'none' : role === 'grader' ? 'low' : undefined);
+    if (effort !== undefined) {
+      body_payload.reasoning = { effort };
     }
 
     const serialized = JSON.stringify(body_payload);
@@ -182,11 +159,13 @@ export async function callJSONValidated<T>(
   role: LLMRole,
   schema: z.ZodSchema<T>,
   maxRetries = 2,
-  maxTokens?: number,
+  options?: number | { maxTokens?: number; reasoningEffort?: string },
 ): Promise<T> {
+  const maxTokens = typeof options === 'number' ? options : options?.maxTokens;
+  const reasoningEffort = typeof options === 'object' ? options?.reasoningEffort : undefined;
   let lastRaw = '';
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const raw = await callLLM(messages, role, maxTokens);
+    const raw = await callLLM(messages, role, maxTokens, reasoningEffort);
     lastRaw = raw;
     // Try to extract JSON — find all candidate {} blocks and try each
     const parsed = extractJSON(raw);
@@ -311,6 +290,7 @@ export async function* streamStudentTokens(messages: Message[]): AsyncGenerator<
         temperature: 0.8,
         max_tokens: 500,
         stream: true,
+        reasoning: { effort: 'none' },
       }),
     });
 
