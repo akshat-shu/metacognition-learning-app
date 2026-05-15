@@ -27,9 +27,41 @@ type Props = {
   onEnd: () => void;
 };
 
+type Confidence = 'guessing' | 'thinking' | 'sure' | null;
+type Move = 'ask-why' | 'edge-case' | 'show-example' | 'compare' | null;
+
+const CONFIDENCE_TAGS: Record<Exclude<Confidence, null>, string> = {
+  guessing: '[I’m guessing]',
+  thinking: '[I think so]',
+  sure: '[I’m sure]',
+};
+
+const MOVE_TAGS: Record<Exclude<Move, null>, string> = {
+  'ask-why': '[move: ask-why]',
+  'edge-case': '[move: edge-case]',
+  'show-example': '[move: show-example]',
+  'compare': '[move: compare]',
+};
+
+const MOVE_LABELS: Record<Exclude<Move, null>, string> = {
+  'ask-why': 'Ask why',
+  'edge-case': 'What if…',
+  'show-example': 'Show example',
+  'compare': 'Compare',
+};
+
+const MOVE_HINTS: Record<Exclude<Move, null>, string> = {
+  'ask-why': 'Probe Sam\'s reasoning. "Why do you think that?"',
+  'edge-case': 'Surface a counter-example. "What about a feather in a vacuum?"',
+  'show-example': 'Anchor in something concrete. "Picture two bowling balls…"',
+  'compare': 'Force a contrast. "How is this different from…?"',
+};
+
 export default function Chat({ sessionId, initialMessages, personaName, subject, onMeta, onEnd }: Props) {
   const [messages, setMessages] = useState<Turn[]>(initialMessages);
   const [input, setInput] = useState('');
+  const [confidence, setConfidence] = useState<Confidence>(null);
+  const [move, setMove] = useState<Move>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [hintLoading, setHintLoading] = useState(false);
   const [hintCooldownUntilTurn, setHintCooldownUntilTurn] = useState(0);
@@ -46,8 +78,16 @@ export default function Chat({ sessionId, initialMessages, personaName, subject,
 
   const sendMessage = async () => {
     if (!input.trim() || isStreaming) return;
-    const userMessage = input.trim();
+    const trimmed = input.trim();
+    const prefixParts: string[] = [];
+    if (confidence) prefixParts.push(CONFIDENCE_TAGS[confidence]);
+    if (move) prefixParts.push(MOVE_TAGS[move]);
+    const userMessage = prefixParts.length > 0
+      ? `${prefixParts.join(' ')} ${trimmed}`
+      : trimmed;
     setInput('');
+    setConfidence(null);
+    setMove(null);
 
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
@@ -173,6 +213,55 @@ export default function Chat({ sessionId, initialMessages, personaName, subject,
 
       {/* Input */}
       <div className="p-4 border-t border-gray-200 bg-white">
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <span className="text-xs text-gray-400 mr-1">How confident?</span>
+          {(['guessing', 'thinking', 'sure'] as const).map(level => {
+            const active = confidence === level;
+            const label = level === 'guessing' ? "I'm guessing" : level === 'thinking' ? "I think so" : "I'm sure";
+            return (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setConfidence(active ? null : level)}
+                disabled={isStreaming}
+                className={
+                  'px-2.5 py-1 text-xs rounded-full border transition-colors ' +
+                  (active
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50')
+                }
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <span className="text-xs text-gray-400 mr-1">Teaching move?</span>
+          {(['ask-why', 'edge-case', 'show-example', 'compare'] as const).map(m => {
+            const active = move === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMove(active ? null : m)}
+                disabled={isStreaming}
+                title={MOVE_HINTS[m]}
+                className={
+                  'px-2.5 py-1 text-xs rounded-full border transition-colors ' +
+                  (active
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50')
+                }
+              >
+                {MOVE_LABELS[m]}
+              </button>
+            );
+          })}
+        </div>
+        {move && (
+          <p className="text-xs text-emerald-700 mb-2 italic">{MOVE_HINTS[move]}</p>
+        )}
         <div className="flex gap-2">
           <input
             type="text"

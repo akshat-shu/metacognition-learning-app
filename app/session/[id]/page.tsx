@@ -32,9 +32,12 @@ export default function SessionPage() {
   const [emoticon, setEmoticon] = useState<'delighted' | 'happy' | 'neutral' | 'concerned' | 'sad'>('neutral');
   const [tag, setTag] = useState('');
   const [miscStates, setMiscStates] = useState<Record<string, string>>({});
-  const [coachNudge, setCoachNudge] = useState<any>(null);
+  const [coachNudge, setCoachNudge] = useState<{ nudge: string; trigger?: string; intensity?: string } | null>(null);
   const [stateTransitions, setStateTransitions] = useState<Array<{ from: string; to: string; misc_id: string }>>([]);
   const [regressionEvents, setRegressionEvents] = useState<Array<{ misc_id: string; belief: string; reason: string }>>([]);
+  const [showReflection, setShowReflection] = useState(false);
+  const [reflection, setReflection] = useState('');
+  const [submittingEnd, setSubmittingEnd] = useState(false);
 
   useEffect(() => {
     const stored = sessionStorage.getItem(`session_${sessionId}`);
@@ -69,20 +72,27 @@ export default function SessionPage() {
     }
   };
 
-  const handleEnd = async () => {
+  const handleEnd = () => {
+    setShowReflection(true);
+  };
+
+  const submitReflectionAndEnd = async () => {
+    if (reflection.trim().length < 10 || submittingEnd) return;
+    setSubmittingEnd(true);
     try {
       const res = await fetch('/api/session/end', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId }),
+        body: JSON.stringify({ sessionId, reflection: reflection.trim() }),
       });
       if (res.ok) {
         const data = await res.json();
-        sessionStorage.setItem(`recap_${sessionId}`, JSON.stringify(data.synthesis));
+        sessionStorage.setItem(`recap_${sessionId}`, JSON.stringify({ ...data.synthesis, reflection: reflection.trim() }));
         router.push(`/recap/${sessionId}`);
       }
     } catch (error) {
       console.error('End session error:', error);
+      setSubmittingEnd(false);
     }
   };
 
@@ -147,6 +157,46 @@ export default function SessionPage() {
           />
         )}
       </div>
+
+      {showReflection && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6">
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-xl">
+            <h2 className="text-lg font-semibold text-gray-800 mb-2">Before you go &mdash; one reflection</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Name one move you tried that didn&apos;t land &mdash; and what you&apos;d try instead next time.
+            </p>
+            <textarea
+              value={reflection}
+              onChange={e => setReflection(e.target.value)}
+              placeholder="I tried &hellip; but it didn&apos;t work because &hellip;  Next time I&apos;d &hellip;"
+              rows={4}
+              className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoFocus
+            />
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-xs text-gray-400">
+                {reflection.trim().length < 10 ? 'At least one sentence' : 'Looks good'}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowReflection(false)}
+                  disabled={submittingEnd}
+                  className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700"
+                >
+                  Keep teaching
+                </button>
+                <button
+                  onClick={submitReflectionAndEnd}
+                  disabled={reflection.trim().length < 10 || submittingEnd}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {submittingEnd ? 'Saving…' : 'Submit & see recap'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
