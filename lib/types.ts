@@ -61,6 +61,7 @@ export type Session = {
   lastCoachTurn: number;
   startedAt: number;
   endedAt?: number;
+  reflection?: string;
 };
 
 export type CoachTrigger = 'soft_nudge' | 'stuck' | 'reasoning_weak' | 'hint_request' | 'transfer_check';

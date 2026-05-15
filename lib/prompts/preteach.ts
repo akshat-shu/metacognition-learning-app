@@ -34,7 +34,8 @@ Generate three short sections in JSON:
 Brief:
 ${JSON.stringify(safeBrief, null, 2)}
 
-Respond with ONLY JSON:
+Respond with ONLY JSON. Use these exact key names spelled exactly as
+shown (note: "primer", not "prider"):
 {
   "concept_primer": "...",
   "misconception_preview": "...",

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 type Message = { role: 'system' | 'user' | 'assistant'; content: string };
-type LLMRole = 'student' | 'judge' | 'grader';
+type LLMRole = 'student' | 'judge' | 'grader' | 'briefGen';
 type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
 
 export type CallOptions = {
@@ -9,6 +9,42 @@ export type CallOptions = {
 };
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+// Model selection map — verified against openrouter.ai/api/v1/models on 2026-05-15.
+// Budget targeting ~$50 over ~4 days, ~30-50 sessions. Per-session totals stay <$0.05
+// on the defaults below; see commit message for the cost arithmetic.
+//
+//   student   — every turn, streamed. Flash-tier mandatory.
+//                qwen3.6-flash ($0.19/$1.13 per M) — solid persona-following, fast.
+//   grader    — every turn, JSON, conditional logic. Cheap reasoning model.
+//                deepseek-v4-flash ($0.13/$0.25 per M) + reasoning:low.
+//   judge     — synth/coach/audit/preteach. One-shot, low stakes.
+//                gemini-3.1-flash-lite ($0.25/$1.5 per M) — fast + cheap.
+//   briefGen  — ONCE per session, kicks off everything. Worth a reasoning model.
+//                deepseek-v4-pro ($0.44/$0.87 per M) + reasoning:medium.
+
+const STUDENT_FALLBACKS = [
+  'qwen/qwen3.6-flash',
+  'deepseek/deepseek-v4-flash-20260423',
+  'google/gemini-3.1-flash-lite-20260507',
+];
+
+const GRADER_FALLBACKS = [
+  'deepseek/deepseek-v4-flash-20260423',
+  'qwen/qwen3.6-flash',
+];
+
+const JUDGE_FALLBACKS = [
+  'google/gemini-3.1-flash-lite-20260507',
+  'qwen/qwen3.6-flash',
+  'google/gemma-4-26b-a4b-it-20260403',
+];
+
+const BRIEF_GEN_FALLBACKS = [
+  'deepseek/deepseek-v4-pro-20260423',
+  'moonshotai/kimi-k2.6-20260420',
+  'qwen/qwen3.6-flash',
+];
 
 function getHeaders(): Record<string, string> {
   return {
@@ -19,18 +55,21 @@ function getHeaders(): Record<string, string> {
   };
 }
 
+function dedupe(list: string[]): string[] {
+  return Array.from(new Set(list.filter(Boolean)));
+}
+
 function getModels(role: LLMRole): string[] {
   if (role === 'student') {
-    const primary = process.env.STUDENT_MODEL || 'qwen/qwen3.5-plus-20260420';
-    return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-flash-02-23'];
+    return dedupe([process.env.STUDENT_MODEL || STUDENT_FALLBACKS[0], ...STUDENT_FALLBACKS]);
   }
-  // Grader uses the stronger model — needs to understand context well
   if (role === 'grader') {
-    return ['qwen/qwen3.5-plus-20260420', 'qwen/qwen3.6-plus', 'qwen/qwen3.6-flash'];
+    return dedupe([process.env.GRADER_MODEL || GRADER_FALLBACKS[0], ...GRADER_FALLBACKS]);
   }
-  // Judge (coach, synth, preteach, audit) — cheaper model is fine
-  const primary = process.env.JUDGE_MODEL || 'qwen/qwen3.5-flash-02-23';
-  return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-27b'];
+  if (role === 'briefGen') {
+    return dedupe([process.env.BRIEF_GEN_MODEL || BRIEF_GEN_FALLBACKS[0], ...BRIEF_GEN_FALLBACKS]);
+  }
+  return dedupe([process.env.JUDGE_MODEL || JUDGE_FALLBACKS[0], ...JUDGE_FALLBACKS]);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -52,11 +91,20 @@ export async function callLLM(
     const body_payload: Record<string, unknown> = {
       model,
       messages,
-      temperature: role === 'student' ? 0.8 : 0.3,
-      max_tokens: role === 'student' ? 500 : 1500,
+      temperature: role === 'student' ? 0.8 : role === 'briefGen' ? 0.6 : 0.3,
+      // briefGen produces a full JSON brief AND may emit reasoning tokens — need
+      // generous headroom or the response truncates mid-thought.
+      max_tokens: role === 'student' ? 500 : role === 'briefGen' ? 8000 : 1500,
     };
     // Per-function reasoning effort: caller can override, otherwise use role default
-    const effort = opts?.reasoningEffort ?? (role === 'grader' ? 'medium' : role === 'judge' ? 'none' : undefined);
+    const effort = opts?.reasoningEffort
+      ?? (role === 'grader'
+        ? 'low'
+        : role === 'judge'
+          ? 'none'
+          : role === 'briefGen'
+            ? 'low'
+            : undefined);
     if (effort) {
       body_payload.reasoning = { effort };
     }

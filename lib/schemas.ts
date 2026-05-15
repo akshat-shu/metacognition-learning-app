@@ -123,11 +123,27 @@ export const CoachResultSchema = z.object({
   }),
 });
 
-export const PreteachResultSchema = z.object({
+export const PreteachResultSchema = z.preprocess((val) => {
+  if (typeof val !== 'object' || val === null) return val;
+  const obj = val as Record<string, unknown>;
+  // Normalize known model typos / aliases for concept_primer
+  if (obj.concept_primer === undefined) {
+    const alias =
+      obj.concept_prider ??
+      obj.conceptPrimer ??
+      obj.concept_intro ??
+      obj.concept_summary ??
+      obj.primer;
+    if (alias !== undefined) {
+      return { ...obj, concept_primer: alias };
+    }
+  }
+  return obj;
+}, z.object({
   concept_primer: z.string().min(50).max(1500),
   misconception_preview: z.string().min(30).max(800),
   strategy_options: z.array(z.string().max(50)).length(4),
-});
+}));
 
 export const AuditResultSchema = z.object({
   approve: z.boolean(),
@@ -148,6 +164,7 @@ export const SynthesisResultSchema = z.object({
     calibration: z.number(),
   }),
   takeaway: z.string(),
+  reflection_check: z.string().optional(),
   ai_literacy: z.object({
     probes_fired: z.number(),
     traps_fired: z.number(),
@@ -160,6 +177,42 @@ export const SynthesisResultSchema = z.object({
     })),
   }),
 });
+
+// Brief generator output — what the LLM produces. id is added server-side after validation.
+export const GeneratedBriefSchema = z.object({
+  subject: z.string().min(3).max(120),
+  scenario: z.string().min(10).max(400),
+  persona: z.object({
+    name: z.string().min(1).max(30),
+    age: z.number().int().min(10).max(20),
+    vibe: z.string().min(2).max(80),
+  }),
+  misconceptions: z.array(z.object({
+    id: z.string().min(1).max(60),
+    belief: z.string().min(5).max(300),
+    depth: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+    surface_when: z.string().min(5).max(300),
+    can_probe: z.boolean().optional().default(false),
+  })).min(1).max(6),
+  probe_claims: z.array(z.object({
+    id: z.string().min(1).max(60),
+    claim: z.string().min(5).max(300),
+    truth: z.string().min(5).max(400),
+    context_hint: z.string().min(3).max(300),
+    difficulty: z.enum(['easy', 'medium', 'hard']),
+  })).max(6).optional().default([]),
+  trap_claims: z.array(z.object({
+    id: z.string().min(1).max(60),
+    claim: z.string().min(5).max(300),
+    truth: z.string().min(5).max(400),
+    context_hint: z.string().min(3).max(300),
+  })).max(6).optional().default([]),
+  honest_topics: z.array(z.string().min(3).max(200)).min(1).max(8),
+  objectives: z.array(z.string().min(5).max(300)).min(1).max(6),
+  preteach_focus: z.string().min(5).max(400),
+});
+
+export type GeneratedBrief = z.infer<typeof GeneratedBriefSchema>;
 
 export type GradeResult = z.infer<typeof GradeResultSchema>;
 export type CoachResult = z.infer<typeof CoachResultSchema>;

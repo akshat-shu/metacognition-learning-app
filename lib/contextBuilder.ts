@@ -108,11 +108,15 @@ export function buildSynthMessages(session: Session): Message[] {
     }
   }).filter(Boolean);
 
+  const reflectionBlock = session.reflection
+    ? `\n\nUser's self-reflection at end of session: "${session.reflection}"`
+    : '';
+
   return [
     { role: 'system', content: buildSynthPrompt() },
     {
       role: 'user',
-      content: `Brief: ${JSON.stringify({ subject: session.brief.subject, scenario: session.brief.scenario, objectives: session.brief.objectives, misconceptions: session.brief.misconceptions })}\n\nFull transcript:\n${turnsText}\n\nAll scores: ${scoresText}\n\nMisconception final states: ${JSON.stringify(session.miscStates)}\n\nProbes and traps used: ${JSON.stringify(probeInfo)}`,
+      content: `Brief: ${JSON.stringify({ subject: session.brief.subject, scenario: session.brief.scenario, objectives: session.brief.objectives, misconceptions: session.brief.misconceptions })}\n\nFull transcript:\n${turnsText}\n\nAll scores: ${scoresText}\n\nMisconception final states: ${JSON.stringify(session.miscStates)}\n\nProbes and traps used: ${JSON.stringify(probeInfo)}${reflectionBlock}`,
     },
   ];
 }
