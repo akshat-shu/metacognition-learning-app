@@ -1,11 +1,11 @@
 [
   {
     "route": "/session/[id]",
-    "firstLoadUncompressedJsBytes": 524032,
+    "firstLoadUncompressedJsBytes": 525504,
     "firstLoadChunkPaths": [
       ".next/static/chunks/01xlw8hd842-c.js",
       ".next/static/chunks/0d3shmwh5_nmn.js",
-      ".next/static/chunks/0bjuj_xuivcj2.js",
+      ".next/static/chunks/05sv9-1upge9l.js",
       ".next/static/chunks/0k7kk1kees4pi.js",
       ".next/static/chunks/0pqt~8bl3ukh4.js",
       ".next/static/chunks/07lhk_q6pmm3r.js",
@@ -29,11 +29,11 @@
   },
   {
     "route": "/preteach/[briefId]",
-    "firstLoadUncompressedJsBytes": 519318,
+    "firstLoadUncompressedJsBytes": 519366,
     "firstLoadChunkPaths": [
       ".next/static/chunks/01xlw8hd842-c.js",
       ".next/static/chunks/0d3shmwh5_nmn.js",
-      ".next/static/chunks/0.cj25v7fz4za.js",
+      ".next/static/chunks/0p-5it99wikb5.js",
       ".next/static/chunks/0k7kk1kees4pi.js",
       ".next/static/chunks/0pqt~8bl3ukh4.js",
       ".next/static/chunks/07lhk_q6pmm3r.js",

@@ -1,4 +1,4 @@
-import { Session, TurnIntent, SamMode, TurnScore } from './types';
+import { Session, TurnIntent, SamMode, TurnScore, CoachTrigger } from './types';
 import { buildStudentSystemPrompt } from './prompts/student';
 import { buildBriefSystemMessage } from './prompts/brief';
 import { buildIntentPrelude } from './prompts/intentPrelude';
@@ -68,7 +68,7 @@ export function buildGraderMessages(
 // Coach: brief in system, last 4 turns, misc states, strategy choices
 export function buildCoachMessages(
   session: Session,
-  trigger: string,
+  trigger: CoachTrigger,
 ): Message[] {
   const recentTurns = session.turns.slice(-4);
   const turnsText = recentTurns.map(t =>

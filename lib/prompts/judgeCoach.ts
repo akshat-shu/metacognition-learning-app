@@ -1,33 +1,30 @@
-import { MisconceptionState } from '../types';
+import { MisconceptionState, CoachTrigger } from '../types';
 
 export function buildCoachPrompt(
-  trigger: string,
+  trigger: CoachTrigger,
   miscStates: Record<string, MisconceptionState>,
   lastTurns: string,
   strategyChoices: string[],
+  triggerDetail?: string,
 ): string {
-  return `You are a Coach giving the learner a strategic nudge. You can see the brief — the learner can't. You will be triggered when:
-- The learner has been stuck in one place for 3+ turns (a misconception isn't advancing)
-- The learner explicitly asked for a hint
-- The learner just got a misconception to "updating" state and needs to verify transfer
+  return `You are a Coach giving the learner a nudge. Tone and intensity depend on the trigger.
 
-You give a STRATEGY nudge, not the answer. Suggest *what kind of move* to try, not what to say.
+Trigger: ${trigger}
 
-Good nudges:
-- "Sam keeps coming back to F=ma because you haven't addressed why gravity itself scales with mass. Try a thought experiment with vacuum + bowling ball + feather."
-- "You've explained it three times. Try asking Sam to predict what would happen instead — get them to commit to a wrong prediction first."
-- "Sam said they get it. Test it: ask them about a slightly different case to see if it really stuck."
+Trigger-specific guidance:
+- soft_nudge: light, optional, questioning. "Curious — have you tried having Sam predict first?" Don't be directive.
+- stuck: directive strategy. "Sam keeps coming back to X because you haven't addressed Y. Try a thought experiment with Z."
+- reasoning_weak: metacognitive. Surface what their teaching is missing, don't give the answer. "You're explaining the conclusion but not the why" / "try slowing down and breaking it into smaller pieces."
+- hint_request: directive but slightly less than 'stuck' (they asked, so they're engaged). Suggest a specific next move.
+- transfer_check: pose a transfer question for them to use. "Sam said they get it — try giving them a different case to test it."
 
-Bad nudges (don't do these):
-- "Tell Sam that all objects fall at g in vacuum." (gives the answer)
-- "Sam is wrong about gravity." (too vague)
-- "Try a different approach." (no actionable content)
+NEVER give the answer. Always nudge a strategy or a question to try.
 
-Trigger reason: ${trigger}
-Current misconception states: ${JSON.stringify(miscStates)}
+Current misc states: ${JSON.stringify(miscStates)}
 Last 4 turns: ${lastTurns}
 User's committed strategy: ${strategyChoices.join(', ')}
+${triggerDetail ? `Trigger reason detail: ${triggerDetail}` : ''}
 
 Respond with ONLY JSON:
-{ "nudge": "<2-3 sentences, conversational, addressed to the user>", "type": "${trigger === 'hint_request' ? 'hint_request' : trigger === 'transfer_check' ? 'transfer_check' : 'stuck'}" }`;
+{"nudge":"<2-3 sentences>","trigger":"${trigger}","intensity":"${trigger === 'soft_nudge' ? 'soft' : trigger === 'reasoning_weak' ? 'firm' : 'directive'}"}`;
 }

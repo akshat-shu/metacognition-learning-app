@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-const VALID_STATES = ['entrenched', 'aware', 'considering', 'updating', 'settled'] as const;
+const VALID_STATES: readonly string[] = ['entrenched', 'aware', 'considering', 'updating', 'settled'];
+const VALID_STATES_ENUM = ['entrenched', 'aware', 'considering', 'updating', 'settled'] as const;
 
 // Preprocess state_transition to handle common LLM output variations
 const StateTransitionSchema = z.preprocess((val) => {
@@ -25,12 +26,50 @@ const StateTransitionSchema = z.preprocess((val) => {
 }, z.union([
   z.object({
     misc_id: z.string(),
-    from: z.enum(VALID_STATES),
-    to: z.enum(VALID_STATES),
+    from: z.enum(VALID_STATES_ENUM),
+    to: z.enum(VALID_STATES_ENUM),
     reason: z.string().optional().default(''),
   }),
   z.null(),
 ]));
+
+// Preprocess state_transitions: accept single object, array, or null → always array
+const StateTransitionsSchema = z.preprocess((val) => {
+  if (val === null || val === undefined || val === 'null') return [];
+  // If it's a single object (not array), wrap in array
+  if (typeof val === 'object' && !Array.isArray(val)) {
+    const obj = val as Record<string, unknown>;
+    if (Object.keys(obj).length === 0) return [];
+    // Normalize single transition object
+    const from = obj.from || obj.current || obj.from_state;
+    const to = obj.to || obj.next || obj.to_state;
+    const misc_id = obj.misc_id || obj.miscId || obj.misconception_id || obj.id || '';
+    const reason = obj.reason || obj.explanation || '';
+    if (from && to && VALID_STATES.includes(from as string) && VALID_STATES.includes(to as string)) {
+      return [{ misc_id: String(misc_id), from, to, reason: String(reason) }];
+    }
+    return [];
+  }
+  if (Array.isArray(val)) {
+    return val.map((item: any) => {
+      if (typeof item !== 'object' || item === null) return null;
+      const from = item.from || item.current || item.from_state;
+      const to = item.to || item.next || item.to_state;
+      const misc_id = item.misc_id || item.miscId || item.misconception_id || item.id || '';
+      const reason = item.reason || item.explanation || '';
+      if (from && to && VALID_STATES.includes(from as string) && VALID_STATES.includes(to as string)) {
+        return { misc_id: String(misc_id), from, to, reason: String(reason) };
+      }
+      return null;
+    }).filter(Boolean);
+  }
+  return [];
+}, z.array(z.object({
+  misc_id: z.string(),
+  from: z.enum(VALID_STATES_ENUM),
+  to: z.enum(VALID_STATES_ENUM),
+  reason: z.string().optional().default(''),
+})).default([]));
 
 export const GradeResultSchema = z.object({
   scores: z.object({
@@ -43,7 +82,6 @@ export const GradeResultSchema = z.object({
   emoticon: z.string().transform((val): 'delighted' | 'happy' | 'neutral' | 'concerned' | 'sad' => {
     const valid = ['delighted', 'happy', 'neutral', 'concerned', 'sad'] as const;
     if (valid.includes(val as any)) return val as any;
-    // Map common LLM outputs to valid emoticons
     if (/delight|excell|🎉|🌟|🎯/.test(val)) return 'delighted';
     if (/happy|good|👍|😊|positive/.test(val)) return 'happy';
     if (/concern|worry|😟|⚠/.test(val)) return 'concerned';
@@ -52,12 +90,37 @@ export const GradeResultSchema = z.object({
   }),
   tag: z.string().max(80),
   evidence: z.string(),
-  state_transition: StateTransitionSchema,
+  // Accept both "state_transition" (single/null) and "state_transitions" (array) from LLM
+  state_transitions: StateTransitionsSchema.optional().default([]),
+  state_transition: StateTransitionSchema.optional(),
+}).transform((val) => {
+  // Merge: if LLM returned singular state_transition, add it to the array
+  const transitions = [...(val.state_transitions || [])];
+  if (val.state_transition) {
+    const exists = transitions.some(t => t.misc_id === val.state_transition!.misc_id);
+    if (!exists) transitions.push(val.state_transition);
+  }
+  return {
+    scores: val.scores,
+    emoticon: val.emoticon,
+    tag: val.tag,
+    evidence: val.evidence,
+    state_transitions: transitions,
+  };
 });
 
 export const CoachResultSchema = z.object({
   nudge: z.string().min(1).max(800),
-  type: z.enum(['stuck', 'hint_request', 'transfer_check']),
+  trigger: z.string().transform((val): 'soft_nudge' | 'stuck' | 'reasoning_weak' | 'hint_request' | 'transfer_check' => {
+    const valid = ['soft_nudge', 'stuck', 'reasoning_weak', 'hint_request', 'transfer_check'] as const;
+    if (valid.includes(val as any)) return val as any;
+    return 'stuck';
+  }),
+  intensity: z.string().transform((val): 'soft' | 'firm' | 'directive' => {
+    const valid = ['soft', 'firm', 'directive'] as const;
+    if (valid.includes(val as any)) return val as any;
+    return 'firm';
+  }),
 });
 
 export const PreteachResultSchema = z.object({

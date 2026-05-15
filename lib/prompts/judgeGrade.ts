@@ -38,13 +38,15 @@ ${buildTransitionGuidance(intentObj, miscStates, misconceptions)}
 Tag: 2-4 words describing the user's message.
 Evidence: one sentence on what triggered the scores.
 
-Respond with ONLY valid JSON. Two examples:
+Respond with ONLY valid JSON. Emit 0, 1, or more state transitions if the user's move clearly affects multiple misconceptions. Be conservative — if a transition is uncertain, don't emit it.
 
-When NO state change: {"scores":{"framing":3,"questions":3,"reasoning":3,"uncertainty":3,"calibration":3},"emoticon":"neutral","tag":"example","evidence":"example","state_transition":null}
+When NO state change: {"scores":{"framing":3,"questions":3,"reasoning":3,"uncertainty":3,"calibration":3},"emoticon":"neutral","tag":"example","evidence":"example","state_transitions":[]}
 
-When state DOES change: {"scores":{"framing":4,"questions":4,"reasoning":4,"uncertainty":3,"calibration":4},"emoticon":"happy","tag":"good probing","evidence":"User asked targeted question","state_transition":{"misc_id":"heavier-faster","from":"entrenched","to":"aware","reason":"User asked probing question about mass vs weight"}}
+When ONE state changes: {"scores":{"framing":4,"questions":4,"reasoning":4,"uncertainty":3,"calibration":4},"emoticon":"happy","tag":"good probing","evidence":"User asked targeted question","state_transitions":[{"misc_id":"heavier-faster","from":"entrenched","to":"aware","reason":"User asked probing question about mass vs weight"}]}
 
-IMPORTANT: If the user's teaching warrants a state change, you MUST include state_transition with all four fields: misc_id, from, to, reason. Do NOT omit misc_id.`;
+When MULTIPLE states change: {"scores":{...},"emoticon":"happy","tag":"broad correction","evidence":"...","state_transitions":[{"misc_id":"heavier-faster","from":"entrenched","to":"aware","reason":"..."},{"misc_id":"force-equals-acceleration","from":"entrenched","to":"aware","reason":"..."}]}
+
+IMPORTANT: Each transition MUST have all four fields: misc_id, from, to, reason. Do NOT omit misc_id.`;
 }
 
 function buildTransitionGuidance(

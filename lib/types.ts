@@ -63,12 +63,24 @@ export type Session = {
   endedAt?: number;
 };
 
+export type CoachTrigger = 'soft_nudge' | 'stuck' | 'reasoning_weak' | 'hint_request' | 'transfer_check';
+
+export type TurnTrace = {
+  orchestratorWeights?: Record<string, number>;
+  orchestratorPicked?: string;
+  graderRawScores?: { framing: number; questions: number; reasoning: number; uncertainty: number; calibration: number };
+  coachTrigger?: CoachTrigger;
+  stateBeforeTurn?: Record<string, MisconceptionState>;
+  stateAfterTurn?: Record<string, MisconceptionState>;
+};
+
 export type Turn = {
   role: 'user' | 'student';
   content: string;
   timestamp: number;
   intent?: TurnIntent;
   mode?: SamMode;
+  trace?: TurnTrace;
 };
 
 export type TurnScore = {

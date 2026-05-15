@@ -1,21 +1,37 @@
-import { Session, TurnIntent, TurnScore, SamMode, Turn } from './types';
+import { Session, TurnIntent, TurnScore, SamMode, Turn, CoachTrigger } from './types';
 
 export function pickIntent(session: Session): TurnIntent {
   const studentTurnCount = session.turnIntents.length;
 
   // First turn: honest question to open naturally
-  if (studentTurnCount === 0) return { type: 'honest_question' };
+  if (studentTurnCount === 0) return attachTrace({ type: 'honest_question' }, {}, 'honest_question');
 
   // Second turn: express the first entrenched misconception — get into it early
   if (studentTurnCount === 1) {
     const firstMisc = session.brief.misconceptions.find(m => session.miscStates[m.id] === 'entrenched');
-    if (firstMisc) return { type: 'express_misc', misc_id: firstMisc.id };
-    return { type: 'honest_reason' };
+    if (firstMisc) return attachTrace({ type: 'express_misc', misc_id: firstMisc.id }, {}, 'express_misc');
+    return attachTrace({ type: 'honest_reason' }, {}, 'honest_reason');
   }
 
   const lastIntents = session.turnIntents.slice(-5);
   const lastIntent = lastIntents[lastIntents.length - 1];
   const recentScores = session.scores.slice(-3);
+
+  // === Fix 3: Force transfer_check when a misconception just hit 'updating' ===
+  const lastScore = recentScores[recentScores.length - 1];
+  if (lastScore) {
+    // Check if the most recent grader turn produced a transition to 'updating'
+    const justUpdated = Object.entries(session.miscStates).find(([id, s]) => {
+      if (s !== 'updating') return false;
+      // Check last student turn's trace for state change
+      const lastStudentTurn = session.turns.filter(t => t.role === 'student').slice(-1)[0];
+      const before = lastStudentTurn?.trace?.stateBeforeTurn?.[id];
+      return before && before !== 'updating';
+    });
+    if (justUpdated) {
+      return attachTrace({ type: 'transfer_check', misc_id: justUpdated[0] }, {}, 'transfer_check_forced');
+    }
+  }
 
   // === Hard rules ===
 
@@ -24,14 +40,8 @@ export function pickIntent(session: Session): TurnIntent {
     const lastUserScore = recentScores[recentScores.length - 1];
     const userPushedWell = lastUserScore && avgRubric(lastUserScore.scores) >= 3.5;
     if (!userPushedWell) {
-      return { type: 'honest_partial' };
+      return attachTrace({ type: 'honest_partial' }, {}, 'honest_partial');
     }
-  }
-
-  // Rule 2: After 3 wrong-mode turns in last 5, force honest
-  const wrongInLast5 = lastIntents.filter(i => !isHonest(i)).length;
-  if (wrongInLast5 >= 3) {
-    return pickHonest(session);
   }
 
   // Rule: probes at most once per 5 turns
@@ -54,15 +64,13 @@ export function pickIntent(session: Session): TurnIntent {
     if (miscState === 'entrenched' || miscState === 'aware') {
       const lastScore = recentScores[recentScores.length - 1];
       if (lastScore && (lastScore.scores.questions >= 3 || lastScore.scores.reasoning >= 3)) {
-        return { type: 'defend_misc', misc_id: miscId };
+        return attachTrace({ type: 'defend_misc', misc_id: miscId }, {}, 'defend_misc');
       }
     }
   }
 
   // === Adaptive weighting ===
   const userChallengeRate = computeChallengeRate(session);
-
-  // Boost misconception intents — the session needs movement
   const miscWeight = activeUnsettled.length > 0 ? 35 : 0;
 
   const weights: Record<string, number> = {
@@ -89,9 +97,20 @@ export function pickIntent(session: Session): TurnIntent {
     weights.probe_trap = 0;
   }
 
-  // No consecutive same-type
+  // Fix 4: Soft pacing — 0.3x multiplier instead of hard zero for consecutive same-type
   if (lastIntent) {
-    weights[lastIntent.type] = 0;
+    weights[lastIntent.type] = (weights[lastIntent.type] ?? 0) * 0.3;
+  }
+
+  // Fix 4: After 3 wrong in last 5, heavy bias toward honest (not hard force)
+  const wrongInLast5 = lastIntents.filter(i => !isHonest(i)).length;
+  if (wrongInLast5 >= 3) {
+    weights.honest_reason *= 3;
+    weights.honest_question *= 3;
+    weights.honest_partial *= 3;
+    weights.express_misc *= 0.2;
+    weights.probe_minor = 0;
+    weights.probe_trap = 0;
   }
 
   // No probes/traps if exhausted
@@ -100,16 +119,29 @@ export function pickIntent(session: Session): TurnIntent {
   if (availableProbes.length === 0) weights.probe_minor = 0;
   if (availableTraps.length === 0) weights.probe_trap = 0;
 
-  const intentType = weightedRandom(weights);
+  // Fix 5: Top-k filter — exclude intents with weight < 15% of max
+  const intentType = topKWeightedRandom(weights);
   console.log(`[Orchestrator] Turn ${studentTurnCount}: picked ${intentType} (weights: ${JSON.stringify(weights)})`);
-  return resolveIntent(intentType, session, activeUnsettled, availableProbes, availableTraps, updatingMisc);
+  const intent = resolveIntent(intentType, session, activeUnsettled, availableProbes, availableTraps, updatingMisc);
+  return attachTrace(intent, weights, intentType);
+}
+
+function attachTrace(intent: TurnIntent, weights: Record<string, number>, picked: string): TurnIntent {
+  (intent as any).__weights = { ...weights };
+  (intent as any).__picked = picked;
+  return intent;
 }
 
 export function pickMode(session: Session): SamMode {
   const modes: SamMode[] = ['curious', 'pushback', 'hedging', 'tangent', 'fake_agreement', 'tired', 'asking_back'];
-  const lastTurn = session.turns.filter(t => t.role === 'student').slice(-1)[0];
-  const lastMode = lastTurn?.mode;
-  const available = modes.filter(m => m !== lastMode);
+  const recentStudentTurns = session.turns.filter(t => t.role === 'student').slice(-5);
+  const lastMode = recentStudentTurns[recentStudentTurns.length - 1]?.mode;
+  const recentModes = recentStudentTurns.map(t => t.mode);
+  const fakeAgreementCount = recentModes.filter(m => m === 'fake_agreement').length;
+  const available = modes.filter(m =>
+    m !== lastMode &&
+    (m !== 'fake_agreement' || fakeAgreementCount === 0)
+  );
   return available[Math.floor(Math.random() * available.length)];
 }
 
@@ -141,22 +173,23 @@ function computeChallengeRate(session: Session): number {
   return challenges / recent.length;
 }
 
-function pickHonest(session: Session): TurnIntent {
-  const lastIntent = session.turnIntents[session.turnIntents.length - 1];
-  const options: TurnIntent['type'][] = ['honest_reason', 'honest_question', 'honest_partial'];
-  const available = options.filter(t => t !== lastIntent?.type);
-  return { type: available[Math.floor(Math.random() * available.length)] } as TurnIntent;
-}
+// Fix 5: Top-k weighted random — filter out weights < 15% of max before sampling
+function topKWeightedRandom(weights: Record<string, number>): string {
+  const entries = Object.entries(weights).filter(([, w]) => w > 0);
+  if (entries.length === 0) return 'honest_reason';
 
-function weightedRandom(weights: Record<string, number>): string {
-  const total = Object.values(weights).reduce((a, b) => a + b, 0);
-  if (total === 0) return 'honest_reason';
+  const max = Math.max(...entries.map(([, w]) => w));
+  const threshold = max * 0.15;
+  const filtered = entries.filter(([, w]) => w >= threshold);
+  if (filtered.length === 0) return 'honest_reason';
+
+  const total = filtered.reduce((s, [, w]) => s + w, 0);
   let r = Math.random() * total;
-  for (const [key, weight] of Object.entries(weights)) {
+  for (const [key, weight] of filtered) {
     r -= weight;
     if (r <= 0) return key;
   }
-  return 'honest_reason';
+  return filtered[filtered.length - 1][0];
 }
 
 function resolveIntent(
@@ -169,7 +202,6 @@ function resolveIntent(
 ): TurnIntent {
   switch (intentType) {
     case 'express_misc': {
-      // Prefer entrenched misconceptions, then aware
       const entrenched = eligibleMiscs.filter(m => session.miscStates[m.id] === 'entrenched');
       const pool = entrenched.length > 0 ? entrenched : eligibleMiscs;
       const misc = pool[Math.floor(Math.random() * pool.length)];
@@ -191,22 +223,61 @@ function resolveIntent(
   }
 }
 
-export function shouldFireCoach(session: Session): boolean {
-  const turnsSinceLast = session.turns.length - session.lastCoachTurn;
-  if (turnsSinceLast < 10) return false;
+// === Coach triggers (Fixes 6-7) ===
+
+export function decideCoachTrigger(session: Session): CoachTrigger | null {
+  const cooldownOk = session.turns.length - session.lastCoachTurn >= 3;
+  if (!cooldownOk) return null;
+
+  // Transfer check trigger
+  const updatingMisc = Object.entries(session.miscStates).find(([, s]) => s === 'updating');
+  if (updatingMisc) {
+    const lastStudentTurn = session.turns.filter(t => t.role === 'student').slice(-1)[0];
+    if (lastStudentTurn?.trace?.stateBeforeTurn) {
+      const before = lastStudentTurn.trace.stateBeforeTurn[updatingMisc[0]];
+      if (before && before !== 'updating') return 'transfer_check';
+    }
+  }
 
   const recentScores = session.scores.slice(-3);
-  if (recentScores.length < 3) return false;
+  if (recentScores.length < 2) return null;
 
-  // Check if misconception states haven't changed in last 3 scored turns
+  // Stuck: same misconception targeted 2+ times WITHOUT forward transitions in recent window
   const miscIntents = recentScores
     .map(s => s.intent_evaluated_against)
     .filter(i => i.type === 'express_misc' || i.type === 'defend_misc') as Array<{ type: string; misc_id: string }>;
-
   if (miscIntents.length >= 2) {
     const miscId = miscIntents[0].misc_id;
-    if (miscIntents.every(i => i.misc_id === miscId)) return true;
+    if (miscIntents.every(i => i.misc_id === miscId)) {
+      // Check if any forward transition happened in the recent window
+      const recentStudentTurns = session.turns.filter(t => t.role === 'student').slice(-3);
+      const hadForwardTransition = recentStudentTurns.some(t => {
+        const before = t.trace?.stateBeforeTurn?.[miscId];
+        const after = t.trace?.stateAfterTurn?.[miscId];
+        if (!before || !after) return false;
+        const ORDER = ['entrenched', 'aware', 'considering', 'updating', 'settled'];
+        return ORDER.indexOf(after) > ORDER.indexOf(before);
+      });
+      if (!hadForwardTransition) return 'stuck';
+    }
   }
 
-  return false;
+  // Reasoning weak: last 3 reasoning scores all ≤ 2, or declining to ≤ 2.5
+  if (recentScores.length >= 3) {
+    const reasoning = recentScores.map(s => s.scores.reasoning);
+    const allWeak = reasoning.every(r => r <= 2);
+    const declining = reasoning[0] > reasoning[2] && reasoning[2] <= 2.5;
+    if (allWeak || declining) return 'reasoning_weak';
+  }
+
+  // Soft nudge: 1+ turn at same state + low reasoning
+  const lastReasoningScore = recentScores[recentScores.length - 1]?.scores.reasoning ?? 3;
+  if (miscIntents.length >= 1 && lastReasoningScore <= 2.5) return 'soft_nudge';
+
+  return null;
+}
+
+// Keep legacy export for backward compat during migration
+export function shouldFireCoach(session: Session): boolean {
+  return decideCoachTrigger(session) !== null;
 }
