@@ -61,15 +61,11 @@ function dedupe(list: string[]): string[] {
 
 function getModels(role: LLMRole): string[] {
   if (role === 'student') {
-    return dedupe([process.env.STUDENT_MODEL || STUDENT_FALLBACKS[0], ...STUDENT_FALLBACKS]);
+    const primary = process.env.STUDENT_MODEL || 'google/gemma-4-26b-a4b-it:free';
+    return [primary, 'openrouter/free'];
   }
-  if (role === 'grader') {
-    return dedupe([process.env.GRADER_MODEL || GRADER_FALLBACKS[0], ...GRADER_FALLBACKS]);
-  }
-  if (role === 'briefGen') {
-    return dedupe([process.env.BRIEF_GEN_MODEL || BRIEF_GEN_FALLBACKS[0], ...BRIEF_GEN_FALLBACKS]);
-  }
-  return dedupe([process.env.JUDGE_MODEL || JUDGE_FALLBACKS[0], ...JUDGE_FALLBACKS]);
+  const primary = process.env.JUDGE_MODEL || 'google/gemma-4-31b-it:free';
+  return [primary, 'google/gemma-4-26b-a4b-it:free', 'openrouter/free'];
 }
 
 function sleep(ms: number): Promise<void> {
