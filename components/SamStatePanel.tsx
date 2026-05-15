@@ -33,18 +33,13 @@ type Props = {
 };
 
 export default function SamStatePanel({ miscStates, misconceptions }: Props) {
-  // Track which ids are currently animating a state transition
-  const [flashingIds, setFlashingIds]           = useState<Set<string>>(new Set());
-  // Track which ids just transitioned to settled (to play strikethrough animation)
-  const [newlySettledIds, setNewlySettledIds]   = useState<Set<string>>(new Set());
-  // Track which ids just had their state label change
-  const [newStateLabelIds, setNewStateLabelIds] = useState<Set<string>>(new Set());
+  const [flashingIds, setFlashingIds]         = useState<Set<string>>(new Set());
+  const [newlySettledIds, setNewlySettledIds] = useState<Set<string>>(new Set());
 
-  const prevStatesRef = useRef<Record<string, MisconceptionState>>({});
+  const prevStatesRef  = useRef<Record<string, MisconceptionState>>({});
   const initializedRef = useRef(false);
 
   useEffect(() => {
-    // Skip animation on first render — just record baseline
     if (!initializedRef.current) {
       const initial: Record<string, MisconceptionState> = {};
       for (const m of misconceptions) {
@@ -55,7 +50,7 @@ export default function SamStatePanel({ miscStates, misconceptions }: Props) {
       return;
     }
 
-    const changed = new Set<string>();
+    const changed     = new Set<string>();
     const justSettled = new Set<string>();
 
     for (const m of misconceptions) {
@@ -69,23 +64,18 @@ export default function SamStatePanel({ miscStates, misconceptions }: Props) {
 
     if (changed.size > 0) {
       setFlashingIds(changed);
-      setNewStateLabelIds(changed);
       if (justSettled.size > 0) setNewlySettledIds(justSettled);
 
-      // Clear flash after animation
       const t1 = setTimeout(() => setFlashingIds(new Set()), 800);
-      const t2 = setTimeout(() => setNewStateLabelIds(new Set()), 500);
-      // Keep newly-settled for the duration of the strikethrough animation (0.15s delay + 0.55s)
-      const t3 = setTimeout(() => setNewlySettledIds(new Set()), 900);
+      const t2 = setTimeout(() => setNewlySettledIds(new Set()), 900);
 
-      // Update ref
       const next: Record<string, MisconceptionState> = { ...prevStatesRef.current };
       for (const m of misconceptions) {
         next[m.id] = (miscStates[m.id] as MisconceptionState) ?? 'entrenched';
       }
       prevStatesRef.current = next;
 
-      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+      return () => { clearTimeout(t1); clearTimeout(t2); };
     }
   }, [miscStates, misconceptions]);
 
@@ -94,11 +84,10 @@ export default function SamStatePanel({ miscStates, misconceptions }: Props) {
       <h3 className={styles.title}>Sam&apos;s beliefs</h3>
       <div className={styles.list}>
         {misconceptions.map(m => {
-          const state   = (miscStates[m.id] as MisconceptionState) ?? 'entrenched';
-          const isFlash   = flashingIds.has(m.id);
-          const isSettled = state === 'settled';
+          const state         = (miscStates[m.id] as MisconceptionState) ?? 'entrenched';
+          const isFlash       = flashingIds.has(m.id);
+          const isSettled     = state === 'settled';
           const isJustSettled = newlySettledIds.has(m.id);
-          const isNewLabel    = newStateLabelIds.has(m.id);
 
           return (
             <div
@@ -111,11 +100,10 @@ export default function SamStatePanel({ miscStates, misconceptions }: Props) {
             >
               <span className={`${styles.dot} ${DOT_CLASS[state]}`}>{DOT_CHAR[state]}</span>
               <div className={styles.info}>
-                <p className={`${styles.state} ${isNewLabel ? styles.stateNew : ''}`}>{state}</p>
                 <p
                   className={[
                     styles.belief,
-                    isSettled    ? styles.beliefSettled    : '',
+                    isSettled     ? styles.beliefSettled     : '',
                     isJustSettled ? styles.beliefJustSettled : '',
                   ].join(' ')}
                 >

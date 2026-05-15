@@ -58,19 +58,6 @@
 
 .info { flex: 1; min-width: 0; }
 
-.state {
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: capitalize;
-  color: var(--text-muted);
-  /* Fades in when it changes */
-  animation: stateLabelIn 0.4s ease-out;
-}
-@keyframes stateLabelIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0);    }
-}
-
 /* Belief text — wraps fully, no truncation */
 .belief {
   font-size: 0.8125rem;
@@ -109,11 +96,3 @@
   to { width: 100%; }
 }
 
-/* New state label slides up when transitioning */
-.stateNew {
-  animation: stateSlideIn 0.35s ease-out;
-}
-@keyframes stateSlideIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0);   }
-}
