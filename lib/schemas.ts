@@ -115,6 +115,42 @@ export const SynthesisResultSchema = z.object({
   }),
 });
 
+// Brief generator output — what the LLM produces. id is added server-side after validation.
+export const GeneratedBriefSchema = z.object({
+  subject: z.string().min(3).max(120),
+  scenario: z.string().min(10).max(400),
+  persona: z.object({
+    name: z.string().min(1).max(30),
+    age: z.number().int().min(10).max(20),
+    vibe: z.string().min(2).max(80),
+  }),
+  misconceptions: z.array(z.object({
+    id: z.string().min(1).max(60),
+    belief: z.string().min(5).max(300),
+    depth: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+    surface_when: z.string().min(5).max(300),
+    can_probe: z.boolean().optional().default(false),
+  })).min(1).max(6),
+  probe_claims: z.array(z.object({
+    id: z.string().min(1).max(60),
+    claim: z.string().min(5).max(300),
+    truth: z.string().min(5).max(400),
+    context_hint: z.string().min(3).max(300),
+    difficulty: z.enum(['easy', 'medium', 'hard']),
+  })).max(6).optional().default([]),
+  trap_claims: z.array(z.object({
+    id: z.string().min(1).max(60),
+    claim: z.string().min(5).max(300),
+    truth: z.string().min(5).max(400),
+    context_hint: z.string().min(3).max(300),
+  })).max(6).optional().default([]),
+  honest_topics: z.array(z.string().min(3).max(200)).min(1).max(8),
+  objectives: z.array(z.string().min(5).max(300)).min(1).max(6),
+  preteach_focus: z.string().min(5).max(400),
+});
+
+export type GeneratedBrief = z.infer<typeof GeneratedBriefSchema>;
+
 export type GradeResult = z.infer<typeof GradeResultSchema>;
 export type CoachResult = z.infer<typeof CoachResultSchema>;
 export type PreteachResult = z.infer<typeof PreteachResultSchema>;
