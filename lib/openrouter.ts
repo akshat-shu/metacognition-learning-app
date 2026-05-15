@@ -30,16 +30,11 @@ function getHeaders(): Record<string, string> {
 
 function getModels(role: LLMRole): string[] {
   if (role === 'student') {
-    const primary = process.env.STUDENT_MODEL || 'qwen/qwen3.5-plus-20260420';
-    return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-flash-02-23'];
+    const primary = process.env.STUDENT_MODEL || 'google/gemma-4-26b-a4b-it:free';
+    return [primary, 'openrouter/free'];
   }
-  // Grader uses the stronger model — needs to understand context well
-  if (role === 'grader') {
-    return ['qwen/qwen3.5-plus-20260420', 'qwen/qwen3.6-plus', 'qwen/qwen3.6-flash'];
-  }
-  // Judge (coach, synth, preteach, audit) — cheaper model is fine
-  const primary = process.env.JUDGE_MODEL || 'qwen/qwen3.5-flash-02-23';
-  return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-27b'];
+  const primary = process.env.JUDGE_MODEL || 'google/gemma-4-31b-it:free';
+  return [primary, 'google/gemma-4-26b-a4b-it:free', 'openrouter/free'];
 }
 
 function sleep(ms: number): Promise<void> {
