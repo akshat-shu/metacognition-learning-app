@@ -1,6 +1,55 @@
 'use client';
 
 import { useState } from 'react';
+import React from 'react';
+
+function renderInline(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={i}>{part.slice(2, -2)}</strong>
+      : part
+  );
+}
+
+function StructuredText({ text }: { text: string }) {
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line.startsWith('## ')) {
+      elements.push(
+        <h3 key={i} className="text-base font-semibold text-gray-800 mt-6 mb-2 first:mt-0">
+          {line.slice(3)}
+        </h3>
+      );
+    } else if (line.startsWith('- ')) {
+      const bullets: string[] = [];
+      while (i < lines.length && lines[i].startsWith('- ')) {
+        bullets.push(lines[i].slice(2));
+        i++;
+      }
+      elements.push(
+        <ul key={`ul-${i}`} className="list-disc list-inside space-y-1 text-gray-700 ml-1 mb-2">
+          {bullets.map((b, j) => <li key={j}>{renderInline(b)}</li>)}
+        </ul>
+      );
+      continue;
+    } else if (line.trim() !== '') {
+      elements.push(
+        <p key={i} className="text-gray-700 leading-relaxed mb-3">
+          {renderInline(line)}
+        </p>
+      );
+    }
+    i++;
+  }
+
+  return <>{elements}</>;
+}
 
 type Props = {
   conceptPrimer: string;
@@ -31,7 +80,7 @@ export default function PreteachFlow({
       <div className="max-w-xl mx-auto p-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-2">Before you teach</h2>
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mt-4">
-          <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{conceptPrimer}</p>
+          <StructuredText text={conceptPrimer} />
         </div>
         <button
           onClick={() => setScreen(1)}

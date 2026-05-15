@@ -64,3 +64,49 @@
 {"timestamp":"01:12:15.581","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 25s before retry 1/6..."}
 {"timestamp":"01:12:40.652","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
 {"timestamp":"01:12:40.702","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"01:40:56.936","source":"Server","level":"WARN","message":"Model qwen/qwen3-235b-a22b:free not found, trying next fallback..."}
+{"timestamp":"01:47:58.108","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 3s before retry 1/6..."}
+{"timestamp":"01:48:01.149","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"01:48:11.126","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 20s before retry 1/6..."}
+{"timestamp":"01:48:31.293","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"01:48:34.985","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 26s before retry 1/6..."}
+{"timestamp":"01:49:01.132","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"01:49:29.132","source":"Server","level":"WARN","message":"Model qwen/qwen3-235b-a22b:free not found, trying next fallback..."}
+{"timestamp":"01:50:52.034","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 9s before retry 1/6..."}
+{"timestamp":"01:51:01.136","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"01:52:32.303","source":"Server","level":"WARN","message":"Model qwen/qwen3-235b-a22b:free not found, trying next fallback..."}
+{"timestamp":"01:54:11.784","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 20s before retry 1/6..."}
+{"timestamp":"01:54:31.899","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"01:54:51.297","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 10s before retry 1/6..."}
+{"timestamp":"01:55:01.831","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"01:55:05.432","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 26s before retry 1/6..."}
+{"timestamp":"01:55:32.256","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"01:55:39.720","source":"Server","level":"ERROR","message":"Grader failed, using defaults: Error: No JSON found in LLM response after 3 attempts"}
+{"timestamp":"01:55:39.753","source":"Server","level":"WARN","message":"Model qwen/qwen3-235b-a22b:free not found, trying next fallback..."}
+{"timestamp":"01:58:05.251","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 27s before retry 1/6..."}
+{"timestamp":"01:58:32.694","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"01:59:08.126","source":"Server","level":"WARN","message":"Model qwen/qwen3-235b-a22b:free not found, trying next fallback..."}
+{"timestamp":"01:59:43.607","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 18s before retry 1/6..."}
+{"timestamp":"02:00:01.778","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"02:00:27.072","source":"Server","level":"WARN","message":"Model qwen/qwen3-235b-a22b:free not found, trying next fallback..."}
+{"timestamp":"03:22:47.995","source":"Server","level":"LOG","message":"✓ Compiled in 135ms"}
+{"timestamp":"03:22:52.858","source":"Server","level":"LOG","message":"✓ Compiled in 30ms"}
+{"timestamp":"03:26:13.471","source":"Browser","level":"INFO","message":"%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"}
+{"timestamp":"03:26:18.794","source":"Browser","level":"INFO","message":"%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"}
+{"timestamp":"03:26:29.624","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 5s before retry 1/6..."}
+{"timestamp":"03:26:36.491","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"03:27:00.046","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 5s before retry 1/6..."}
+{"timestamp":"03:27:05.218","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"03:27:37.119","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 28s before retry 1/6..."}
+{"timestamp":"03:27:37.532","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 28s before retry 1/6..."}
+{"timestamp":"03:28:05.695","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"03:28:07.610","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"03:28:12.698","source":"Server","level":"ERROR","message":"Preteach init error: Error: OpenRouter error (500): {\"error\":{\"message\":\"Internal Server Error\",\"code\":500}}"}
+{"timestamp":"03:28:18.940","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 17s before retry 1/6..."}
+{"timestamp":"03:28:36.316","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"03:28:42.800","source":"Server","level":"ERROR","message":"Preteach init error: Error: OpenRouter error (400): {\"error\":{\"message\":\"Provider returned error\",\"code\":400,\"metadata\":{\"raw\":\"{\\n  \\\"error\\\": {\\n    \\\"code\\\": 400,\\n    \\\"message\\\": \\\"* GenerateContentRequest.contents[0].parts[0].data: required oneof field 'data' must have one initialized field\\\\n\\\",\\n    \\\"status\\\": \\\"INVALID_ARGUMENT\\\"\\n  }\\n}\\n\",\"provider_name\":\"Google AI Studio\",\"is_byok\":false}},\"user_id\":\"user_3DiYw6DGj5aUjFapb3djY1Vf1BR\"}"}
+{"timestamp":"03:29:30.266","source":"Browser","level":"INFO","message":"%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"}
+{"timestamp":"03:29:31.403","source":"Server","level":"WARN","message":"Rate limited on meta-llama/llama-3.3-70b-instruct:free, waiting 5s before retry 1/6..."}
+{"timestamp":"03:29:36.651","source":"Server","level":"WARN","message":"Model google/gemma-3-27b-it:free not found, trying next fallback..."}
+{"timestamp":"03:29:46.654","source":"Server","level":"ERROR","message":"Preteach init error: Error: OpenRouter error (500): {\"error\":{\"message\":\"Internal Server Error\",\"code\":500}}"}
+{"timestamp":"03:40:08.311","source":"Browser","level":"INFO","message":"%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"}

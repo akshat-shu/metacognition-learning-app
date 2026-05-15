@@ -105,7 +105,7 @@ export const CoachResultSchema = z.object({
 });
 
 export const PreteachResultSchema = z.object({
-  concept_primer: z.string().min(1).transform(s => s.slice(0, 1500)),
+  concept_primer: z.string().min(1).transform(s => s.slice(0, 5000)),
   misconception_preview: z.string().min(1).transform(s => s.slice(0, 800)),
   strategy_options: z.array(z.string().transform(s => s.slice(0, 50))).length(4),
 });
