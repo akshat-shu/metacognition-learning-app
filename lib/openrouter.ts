@@ -2,6 +2,11 @@ import { z } from 'zod';
 
 type Message = { role: 'system' | 'user' | 'assistant'; content: string };
 type LLMRole = 'student' | 'judge' | 'grader' | 'briefGen';
+type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
+
+export type CallOptions = {
+  reasoningEffort?: ReasoningEffort;
+};
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -74,6 +79,7 @@ function sleep(ms: number): Promise<void> {
 export async function callLLM(
   messages: Message[],
   role: LLMRole,
+  opts?: CallOptions,
 ): Promise<string> {
   const models = getModels(role);
   const maxRetries = models.length * 2; // Each model gets 2 chances
@@ -90,18 +96,17 @@ export async function callLLM(
       // generous headroom or the response truncates mid-thought.
       max_tokens: role === 'student' ? 500 : role === 'briefGen' ? 8000 : 1500,
     };
-    // Reasoning effort by role:
-    //   judge   — none (one-shot creative tasks, no need to burn tokens)
-    //   grader  — low (conditional state-transition logic needs it)
-    //   briefGen — low (kept low: 'medium' fills the budget with chain-of-thought
-    //              and leaves no room for actual JSON output)
-    //   student — no reasoning (streamed, persona-driven, latency-sensitive)
-    if (role === 'judge') {
-      body_payload.reasoning = { effort: 'none' };
-    } else if (role === 'grader') {
-      body_payload.reasoning = { effort: 'low' };
-    } else if (role === 'briefGen') {
-      body_payload.reasoning = { effort: 'low' };
+    // Per-function reasoning effort: caller can override, otherwise use role default
+    const effort = opts?.reasoningEffort
+      ?? (role === 'grader'
+        ? 'low'
+        : role === 'judge'
+          ? 'none'
+          : role === 'briefGen'
+            ? 'low'
+            : undefined);
+    if (effort) {
+      body_payload.reasoning = { effort };
     }
 
     const res = await fetch(OPENROUTER_URL, {
@@ -185,27 +190,83 @@ function extractJSON(raw: string): Record<string, unknown> | null {
   return null;
 }
 
+// --- Levenshtein key normalization (Fix 1) ---
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+    [i, ...Array(n).fill(0)]
+  );
+  for (let j = 1; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+function normalizeKeys(obj: unknown, expectedKeys: string[]): unknown {
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return obj;
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    if (expectedKeys.includes(key)) {
+      result[key] = value;
+      continue;
+    }
+    const match = expectedKeys
+      .map(e => ({ key: e, dist: levenshtein(key, e) }))
+      .filter(x => x.dist > 0 && x.dist <= 2)
+      .sort((a, b) => a.dist - b.dist)[0];
+    if (match && !(match.key in result)) {
+      console.warn(`[KeyNorm] Corrected "${key}" → "${match.key}" (dist ${match.dist})`);
+      result[match.key] = value;
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+function getExpectedKeys(schema: z.ZodSchema): string[] {
+  try {
+    const shape = (schema as any)?._def?.shape?.() || (schema as any)?._def?.shape || {};
+    return Object.keys(shape);
+  } catch {
+    return [];
+  }
+}
+
 export async function callJSONValidated<T>(
   messages: Message[],
   role: LLMRole,
   schema: z.ZodSchema<T>,
   maxRetries = 2,
+  opts?: CallOptions,
 ): Promise<T> {
+  const expectedKeys = getExpectedKeys(schema);
   let lastRaw = '';
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const raw = await callLLM(messages, role);
+    const raw = await callLLM(messages, role, opts);
     lastRaw = raw;
-    // Try to extract JSON — find all candidate {} blocks and try each
     const parsed = extractJSON(raw);
     if (parsed !== null) {
+      // Normalize keys before validation (catches concept_prider → concept_primer etc.)
+      const normalized = expectedKeys.length > 0
+        ? normalizeKeys(parsed, expectedKeys) as Record<string, unknown>
+        : parsed;
       try {
-        const result = schema.parse(parsed);
+        const result = schema.parse(normalized);
         return result;
       } catch (e) {
-        console.warn(`JSON validation failed (attempt ${attempt + 1}). Keys:`, Object.keys(parsed), 'Sample:', JSON.stringify(parsed).slice(0, 300));
-        // Log state_transition specifically if present (common failure point)
-        if ('state_transition' in parsed) {
-          console.warn('  state_transition value:', JSON.stringify(parsed.state_transition));
+        console.warn(`JSON validation failed (attempt ${attempt + 1}). Keys:`, Object.keys(normalized), 'Sample:', JSON.stringify(normalized).slice(0, 300));
+        if ('state_transitions' in normalized) {
+          console.warn('  state_transitions value:', JSON.stringify(normalized.state_transitions));
+        } else if ('state_transition' in normalized) {
+          console.warn('  state_transition value:', JSON.stringify(normalized.state_transition));
         }
         if (attempt === maxRetries) throw e;
       }
@@ -300,6 +361,72 @@ export async function streamLLM(
 // Convenience: call student and collect full response (for opener, etc.)
 export async function callStudent(messages: Message[]): Promise<string> {
   return callLLM(messages, 'student');
+}
+
+// Stream student response — yields chunks as they arrive, returns full content via callback
+export async function* streamStudentTokens(messages: Message[]): AsyncGenerator<string, string> {
+  const models = getModels('student');
+  let res: Response | null = null;
+
+  for (let attempt = 0; attempt < models.length * 2; attempt++) {
+    const model = models[attempt % models.length];
+    const r = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.8,
+        max_tokens: 500,
+        stream: true,
+      }),
+    });
+
+    if (r.ok) { res = r; break; }
+
+    if (r.status === 429) {
+      const waitSeconds = 5 * (attempt + 1);
+      console.warn(`Stream rate limited on ${model}, waiting ${waitSeconds}s...`);
+      await sleep(waitSeconds * 1000);
+      continue;
+    }
+    if (r.status === 404) {
+      console.warn(`Stream model ${model} not found, trying next...`);
+      continue;
+    }
+    const err = await r.text();
+    throw new Error(`OpenRouter stream error (${r.status}): ${err}`);
+  }
+
+  if (!res) throw new Error('All stream retry attempts exhausted');
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullContent = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') return fullContent;
+      try {
+        const delta = JSON.parse(data).choices?.[0]?.delta?.content;
+        if (delta) {
+          fullContent += delta;
+          yield delta;
+        }
+      } catch {}
+    }
+  }
+
+  return fullContent;
 }
 
 export async function callJudge(messages: Message[]): Promise<string> {

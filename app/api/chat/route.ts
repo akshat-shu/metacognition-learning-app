@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
 import { getSession, saveSession } from '@/lib/session';
-import { callJSONValidated, streamLLM, callStudent } from '@/lib/openrouter';
+import { callJSONValidated, streamStudentTokens, callStudent } from '@/lib/openrouter';
 import { GradeResultSchema, CoachResultSchema } from '@/lib/schemas';
 import { buildStudentMessages, buildGraderMessages, buildCoachMessages } from '@/lib/contextBuilder';
-import { pickIntent, pickMode, shouldFireCoach } from '@/lib/orchestrator';
-import { applyTransition } from '@/lib/stateMachine';
-import { TurnIntent } from '@/lib/types';
+import { pickIntent, pickMode, decideCoachTrigger } from '@/lib/orchestrator';
+import { applyTransition, getStateIndex } from '@/lib/stateMachine';
+import { TurnIntent, TurnTrace } from '@/lib/types';
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 1. Append user turn
+    // 1. Capture state before turn, append user turn
+    const stateBeforeTurn = { ...session.miscStates };
     session.turns.push({
       role: 'user',
       content: userMessage,
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
         emoticon: 'neutral' as const,
         tag: 'processing',
         evidence: 'Grader unavailable',
-        state_transition: null,
+        state_transitions: [],
       };
     }
 
@@ -55,11 +56,24 @@ export async function POST(req: NextRequest) {
       intent_evaluated_against: lastIntent,
     });
 
-    // 4. Apply state transition if any
-    console.log(`[Chat] Grader result — tag: "${gradeResult.tag}", scores: ${JSON.stringify(gradeResult.scores)}, transition: ${JSON.stringify(gradeResult.state_transition)}`);
-    if (gradeResult.state_transition) {
-      console.log(`[Chat] STATE CHANGE: ${gradeResult.state_transition.misc_id} ${gradeResult.state_transition.from} → ${gradeResult.state_transition.to}`);
-      session.miscStates = applyTransition(session.miscStates, gradeResult.state_transition);
+    // 3b. Calibration diagnostic logging
+    const calibrationScore = gradeResult.scores.calibration;
+    const expectedRange = getExpectedCalibrationRange(lastIntent);
+    const calibrationMatch = calibrationScore >= expectedRange.min && calibrationScore <= expectedRange.max;
+    console.log(`[Calibration] score=${calibrationScore}, intent=${lastIntent.type}, expected=${expectedRange.min}-${expectedRange.max}, match=${calibrationMatch}`);
+
+    // 4. Apply state transitions (now supports multiple per turn)
+    console.log(`[Chat] Grader result — tag: "${gradeResult.tag}", scores: ${JSON.stringify(gradeResult.scores)}, transitions: ${JSON.stringify(gradeResult.state_transitions)}`);
+    const regressionEvents: Array<{ misc_id: string; belief: string; reason: string }> = [];
+    for (const transition of gradeResult.state_transitions) {
+      console.log(`[Chat] STATE CHANGE: ${transition.misc_id} ${transition.from} → ${transition.to}`);
+      // Detect regression
+      if (getStateIndex(transition.to as any) < getStateIndex(transition.from as any)) {
+        const belief = session.brief.misconceptions.find(m => m.id === transition.misc_id)?.belief || '';
+        regressionEvents.push({ misc_id: transition.misc_id, belief, reason: transition.reason });
+        console.log(`[Chat] REGRESSION: ${transition.misc_id} went backwards`);
+      }
+      session.miscStates = applyTransition(session.miscStates, transition);
     }
     console.log(`[Chat] Current miscStates: ${JSON.stringify(session.miscStates)}`);
 
@@ -84,38 +98,46 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // Get full student response (non-streaming for simplicity with free tier)
-          const studentResponse = await callStudent(studentMessages);
-
-          // Send content chunks
-          const words = studentResponse.split(' ');
+          // Stream student response token-by-token
           let accumulated = '';
-          for (let i = 0; i < words.length; i++) {
-            const chunk = (i === 0 ? '' : ' ') + words[i];
+          const tokenStream = streamStudentTokens(studentMessages);
+          for await (const chunk of tokenStream) {
             accumulated += chunk;
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify({ type: 'content', content: chunk })}\n\n`)
             );
           }
 
-          // 8. Append student turn
+          // 8. Append student turn with trace
+          const trace: TurnTrace = {
+            orchestratorWeights: (newIntent as any).__weights,
+            orchestratorPicked: (newIntent as any).__picked,
+            graderRawScores: gradeResult.scores,
+            stateBeforeTurn,
+            stateAfterTurn: { ...session.miscStates },
+          };
           session.turns.push({
             role: 'student',
             content: accumulated.trim(),
             timestamp: Date.now(),
             intent: newIntent,
             mode,
+            trace,
           });
           session.turnIntents.push(newIntent);
 
-          // 9. Check stuck-loop detector for Coach
+          // 9. Check coach triggers (layered intervention)
           let coachNudge = null;
-          if (shouldFireCoach(session)) {
+          const coachTrigger = decideCoachTrigger(session);
+          if (coachTrigger) {
             try {
-              const coachMessages = buildCoachMessages(session, 'stuck');
-              coachNudge = await callJSONValidated(coachMessages, 'judge', CoachResultSchema);
+              console.log(`[Chat] Coach triggered: ${coachTrigger}`);
+              const coachMessages = buildCoachMessages(session, coachTrigger);
+              coachNudge = await callJSONValidated(coachMessages, 'judge', CoachResultSchema, 2, { reasoningEffort: 'medium' });
               session.coachNudgeCount++;
               session.lastCoachTurn = session.turns.length;
+              // Record coach trigger in trace
+              if (trace) trace.coachTrigger = coachTrigger;
             } catch (e) {
               console.error('Coach failed:', e);
             }
@@ -132,7 +154,8 @@ export async function POST(req: NextRequest) {
               emoticon: gradeResult.emoticon,
               tag: gradeResult.tag,
               evidence: gradeResult.evidence,
-              state_transition: gradeResult.state_transition,
+              state_transitions: gradeResult.state_transitions,
+              regressionEvents,
               coachNudge,
               miscStates: session.miscStates,
               intent: newIntent.type,
@@ -164,5 +187,28 @@ export async function POST(req: NextRequest) {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+}
+
+// Calibration diagnostic: expected score ranges per intent type
+function getExpectedCalibrationRange(intent: TurnIntent): { min: number; max: number } {
+  switch (intent.type) {
+    case 'probe_minor':
+    case 'probe_trap':
+      // If user caught the error → high, missed → low. Wide range expected.
+      return { min: 1, max: 5 };
+    case 'express_misc':
+    case 'defend_misc':
+      // Attempting correction → high, accepting wrong → low
+      return { min: 2, max: 5 };
+    case 'honest_reason':
+    case 'honest_question':
+    case 'honest_partial':
+      // Accepting/building on honest = high, over-correcting = low
+      return { min: 2, max: 5 };
+    case 'transfer_check':
+      return { min: 3, max: 5 };
+    default:
+      return { min: 2, max: 4 };
   }
 }

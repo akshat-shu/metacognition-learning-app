@@ -1,5 +1,2 @@
-{"timestamp":"00:00:00.935","source":"Server","level":"LOG","message":""}
-{"timestamp":"00:00:11.185","source":"Browser","level":"INFO","message":"%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"}
-{"timestamp":"00:06:19.989","source":"Server","level":"LOG","message":"[Chat] Grader result — tag: \"probing question\", scores: {\"framing\":2,\"questions\":3,\"reasoning\":1,\"uncertainty\":3,\"calibration\":3}, transition: null"}
-{"timestamp":"00:06:19.990","source":"Server","level":"LOG","message":"[Chat] Current miscStates: {\"same-coefficient-necessary\":\"entrenched\",\"one-solution-parallel\":\"entrenched\",\"substitution-only-one-way\":\"entrenched\",\"infinite-same-line-one-solution\":\"entrenched\"}"}
-{"timestamp":"00:06:19.991","source":"Server","level":"LOG","message":"[Chat] New intent: express_misc (same-coefficient-necessary), mode: asking_back"}
+{"timestamp":"00:00:00.761","source":"Server","level":"LOG","message":""}
+{"timestamp":"00:00:02.088","source":"Browser","level":"INFO","message":"%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"}

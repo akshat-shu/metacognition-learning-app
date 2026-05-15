@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     }
 
     const messages = buildSynthMessages(session);
-    const synthesis = await callJSONValidated(messages, 'judge', SynthesisResultSchema);
+    const synthesis = await callJSONValidated(messages, 'judge', SynthesisResultSchema, 2, { reasoningEffort: 'medium' });
 
     saveSession(session);
 
