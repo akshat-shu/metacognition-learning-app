@@ -18,6 +18,15 @@ The AI student's MOST RECENT turn intent: ${intentDescription}
 Score the user's NEW message 1-5 on these dimensions (be strict — 3 is average, 5 is exceptional):
 - **framing**: scoping, focusing inquiry, setting context. Score 1-2 if vague, 3 if adequate, 4-5 if excellent.
 - **questions**: probing, well-targeted. 1-2 for leading/yes-no, 3 for decent, 4-5 for Socratic.
+  - **Teaching move marker**: the user may prefix their message with one of:
+    "[move: ask-why]" (probing reasoning), "[move: edge-case]" (offering a counter-example),
+    "[move: show-example]" (anchoring in something concrete), or "[move: compare]"
+    (forcing a contrast). When a marker is present, score whether the MESSAGE BODY
+    actually delivers on that move:
+      - Marker + faithful execution (e.g. ask-why marker with a real "why" question) → +1 bonus toward questions/framing.
+      - Marker + body that doesn't match (e.g. ask-why marker but body is a flat assertion) → cap questions at 2.
+      - Markers themselves do not affect calibration; ignore them for that dimension.
+    No marker = score on the move alone.
 - **reasoning**: visible structured thought. 1-2 for assertions, 3 for some reasoning, 4-5 for evidence+examples.
 - **uncertainty**: appropriate hedging. 3 if neutral, 4-5 if well-calibrated.
 - **calibration**: was the user's response appropriate for what the student just did?
