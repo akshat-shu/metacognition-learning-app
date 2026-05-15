@@ -55,11 +55,13 @@ function getModels(role: LLMRole): string[] {
     const primary = process.env.STUDENT_MODEL || 'qwen/qwen3.5-plus-20260420';
     return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-flash-02-23'];
   }
+  // Grader uses the stronger model — needs to understand context well
   if (role === 'grader') {
     return ['qwen/qwen3.5-plus-20260420', 'qwen/qwen3.6-plus', 'qwen/qwen3.6-flash'];
   }
-  const primary = process.env.JUDGE_MODEL || 'qwen/qwen3.5-plus-20260420';
-  return [primary, 'qwen/qwen3.5-flash-02-23', 'qwen/qwen3.5-27b', 'qwen/qwen3.6-flash'];
+  // Judge (coach, synth, preteach, audit) — cheaper model is fine
+  const primary = process.env.JUDGE_MODEL || 'qwen/qwen3.5-flash-02-23';
+  return [primary, 'qwen/qwen3.6-flash', 'qwen/qwen3.5-27b'];
 }
 
 function sleep(ms: number): Promise<void> {
@@ -73,7 +75,6 @@ export async function callLLM(
 ): Promise<string> {
   const models = getModels(role);
   const maxRetries = models.length * 2; // Each model gets 2 chances
-  const tokenLimit = maxTokens ?? (role === 'student' ? 500 : 1500);
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     // Cycle through models on retries
@@ -83,29 +84,31 @@ export async function callLLM(
       model,
       messages,
       temperature: role === 'student' ? 0.8 : 0.3,
-      max_tokens: tokenLimit,
+      max_tokens: maxTokens ?? (role === 'student' ? 500 : 1500),
     };
-    // Qwen3 models are thinking models — disable/lower reasoning to get
-    // plain JSON output instead of a reasoning chain that breaks parsing
+    // Grader needs some reasoning to follow conditional transition logic
+    // Judge (coach, synth) can work without reasoning
     if (role === 'judge') {
       body_payload.reasoning = { effort: 'none' };
     } else if (role === 'grader') {
       body_payload.reasoning = { effort: 'low' };
     }
 
+    const serialized = JSON.stringify(body_payload);
+    console.log(`[callLLM] attempt=${attempt} model=${model} bodyLen=${serialized.length} key=${process.env.OPENROUTER_API_KEY?.slice(-8)}`);
     const res = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify(body_payload),
+      body: serialized,
     });
 
     if (res.ok) {
       const data = await res.json();
       const msg = data.choices?.[0]?.message;
+      // Some models put content in reasoning when thinking is on
       const content = msg?.content || msg?.reasoning || '';
       if (!content) {
-        console.warn(`Empty content from ${model}. choices: ${data.choices?.length ?? 'missing'}, msg: ${JSON.stringify(msg ?? null).slice(0, 200)}`);
-        continue;
+        console.warn(`Empty content from ${model}. Message keys:`, msg ? Object.keys(msg) : 'null', 'Full:', JSON.stringify(msg ?? null).slice(0, 300));
       }
       return content;
     }
@@ -133,12 +136,6 @@ export async function callLLM(
       continue;
     }
 
-    // 500 from OpenRouter — log body and try next fallback
-    if (res.status === 500) {
-      console.warn(`OpenRouter 500 on ${model}: ${body.slice(0, 200)}`);
-      continue;
-    }
-
     throw new Error(`OpenRouter error (${res.status}): ${body}`);
   }
 
@@ -152,7 +149,7 @@ function extractJSON(raw: string): Record<string, unknown> | null {
     if (typeof parsed === 'object' && parsed !== null) return parsed;
   } catch {}
 
-  // Find all JSON blocks using balanced-brace matching, try largest first
+  // Find JSON blocks by matching balanced braces
   const candidates: string[] = [];
   for (let i = 0; i < raw.length; i++) {
     if (raw[i] === '{') {
@@ -168,6 +165,7 @@ function extractJSON(raw: string): Record<string, unknown> | null {
     }
   }
 
+  // Try candidates from largest to smallest (response JSON is usually the biggest)
   candidates.sort((a, b) => b.length - a.length);
   for (const candidate of candidates) {
     try {
@@ -190,6 +188,7 @@ export async function callJSONValidated<T>(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const raw = await callLLM(messages, role, maxTokens);
     lastRaw = raw;
+    // Try to extract JSON — find all candidate {} blocks and try each
     const parsed = extractJSON(raw);
     if (parsed !== null) {
       try {
@@ -197,6 +196,7 @@ export async function callJSONValidated<T>(
         return result;
       } catch (e) {
         console.warn(`JSON validation failed (attempt ${attempt + 1}). Keys:`, Object.keys(parsed), 'Sample:', JSON.stringify(parsed).slice(0, 300));
+        // Log state_transition specifically if present (common failure point)
         if ('state_transition' in parsed) {
           console.warn('  state_transition value:', JSON.stringify(parsed.state_transition));
         }
@@ -244,11 +244,6 @@ export async function streamLLM(
 
     if (r.status === 404) {
       console.warn(`Stream model ${model} not found, trying next fallback...`);
-      continue;
-    }
-
-    if (r.status === 500) {
-      console.warn(`Stream OpenRouter 500 on ${model}, trying next fallback...`);
       continue;
     }
 

@@ -35,7 +35,7 @@ Format using markdown with these exact sections:
 Walk through one concrete, specific example step by step. Make it tangible and easy to follow.
 
 ## Key things to know before teaching
-3–4 bullet points (using `- `) of the most important things to keep in mind when teaching this topic.
+3–4 bullet points (using \`- \`) of the most important things to keep in mind when teaching this topic.
 
 2. **misconception_preview** (~80 words): without giving away the specific beliefs Sam holds, describe the CATEGORY of confusion students often have here. Frame the learner as a coach, not a textbook.
 
