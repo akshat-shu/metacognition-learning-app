@@ -91,6 +91,12 @@
       "namedRegex": "^/api/session/end(?:/)?$"
     },
     {
+      "page": "/api/session/export",
+      "regex": "^/api/session/export(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/session/export(?:/)?$"
+    },
+    {
       "page": "/api/session/start",
       "regex": "^/api/session/start(?:/)?$",
       "routeKeys": {},

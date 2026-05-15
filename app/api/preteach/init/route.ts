@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       { role: 'user' as const, content: buildPreteachPrompt(brief) },
     ];
 
-    const result = await callJSONValidated(messages, 'judge', PreteachResultSchema);
+    const result = await callJSONValidated(messages, 'judge', PreteachResultSchema, 2, { reasoningEffort: 'low' });
     return NextResponse.json(result);
   } catch (error) {
     console.error('Preteach init error:', error);

@@ -12,8 +12,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
-    const messages = buildCoachMessages(session, 'hint_request');
-    const result = await callJSONValidated(messages, 'judge', CoachResultSchema);
+    const messages = buildCoachMessages(session, 'hint_request' as any);
+    const result = await callJSONValidated(messages, 'judge', CoachResultSchema, 2, { reasoningEffort: 'medium' });
 
     session.coachNudgeCount++;
     session.lastCoachTurn = session.turns.length;

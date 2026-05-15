@@ -5,6 +5,7 @@
   "/api/coach/request/route": "app/api/coach/request/route.js",
   "/api/preteach/init/route": "app/api/preteach/init/route.js",
   "/api/session/end/route": "app/api/session/end/route.js",
+  "/api/session/export/route": "app/api/session/export/route.js",
   "/api/session/start/route": "app/api/session/start/route.js",
   "/page": "app/page.js",
   "/preteach/[briefId]/page": "app/preteach/[briefId]/page.js",
