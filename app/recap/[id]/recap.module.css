@@ -1,0 +1,30 @@
+.page {
+  min-height: 100vh;
+  padding: 36px 0;
+  background: var(--bg-page);
+}
+
+/* No data state */
+.noDataPage {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.noDataCenter { text-align: center; }
+.noDataText {
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  font-size: 0.9375rem;
+}
+.goHomeBtn {
+  padding: 9px 22px;
+  background: var(--primary);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background var(--transition-fast);
+}
+.goHomeBtn:hover { background: var(--primary-hover); }

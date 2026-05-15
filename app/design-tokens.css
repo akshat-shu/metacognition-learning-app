@@ -1,0 +1,93 @@
+:root {
+  /* ── Backgrounds ────────────────────────────── */
+  --bg-page:         #f5efe3;
+  --bg-surface:      #fefcf7;
+  --bg-surface-alt:  #f0e8d8;
+  --bg-surface-raised: #faf5ec;
+
+  /* ── Text ───────────────────────────────────── */
+  --text-primary:     #2b1d0e;
+  --text-secondary:   #5c3d22;
+  --text-muted:       #8c6843;
+  --text-placeholder: #b8926a;
+
+  /* ── Borders ────────────────────────────────── */
+  --border:         #ddd0bd;
+  --border-light:   #ece4d4;
+  --border-focus:   #5a9470;
+
+  /* ── Primary – Pastel Green ────────────────── */
+  --primary:        #5a9470;
+  --primary-hover:  #467a5c;
+  --primary-light:  #cce8d8;
+  --primary-faint:  #edf7f1;
+
+  /* ── Accent – Deep Green ────────────────────── */
+  --accent:         #2d6b46;
+  --accent-hover:   #1f5234;
+  --accent-light:   #d4edde;
+  --accent-text:    #1a3d28;
+
+  /* ── Semantic – Success ─────────────────────── */
+  --success:        #2d6b46;
+  --success-bg:     #e0efea;
+  --success-border: #9dcbb8;
+  --success-text:   #1a3f28;
+
+  /* ── Semantic – Warning ─────────────────────── */
+  --warn:           #b8751a;
+  --warn-bg:        #fef5e0;
+  --warn-border:    #f0c878;
+  --warn-text:      #7a4d10;
+
+  /* ── Semantic – Danger ──────────────────────── */
+  --danger:         #a83428;
+  --danger-bg:      #faeae8;
+  --danger-border:  #e8a8a3;
+  --danger-text:    #7d201a;
+
+  /* ── Semantic – Info ────────────────────────── */
+  --info:           #2a5580;
+  --info-bg:        #e0ecf8;
+  --info-border:    #a0c0e0;
+  --info-text:      #1a3650;
+
+  /* ── Purple (belief states) ─────────────────── */
+  --purple-bg:      #f0ebf8;
+  --purple-border:  #c4aee0;
+  --purple-text:    #5a3a8c;
+  --purple-dark:    #3d2466;
+
+  /* ── Teal (updating states) ─────────────────── */
+  --teal-bg:        #e0f4f1;
+  --teal-border:    #8ed4c8;
+  --teal-text:      #1c6358;
+
+  /* ── Typography ─────────────────────────────── */
+  --font-heading: Georgia, 'Palatino Linotype', Palatino, serif;
+  --font-body:    'Helvetica Neue', system-ui, -apple-system, sans-serif;
+  --font-mono:    'Courier New', Courier, monospace;
+
+  /* ── Radius ──────────────────────────────────── */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius:    12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 9999px;
+
+  /* ── Shadows (warm-tinted, not cold gray) ───── */
+  --shadow-sm: 0 1px 3px rgba(43, 29, 14, 0.07),
+               0 1px 2px rgba(43, 29, 14, 0.05);
+  --shadow:    0 4px 12px rgba(43, 29, 14, 0.09),
+               0 2px 4px  rgba(43, 29, 14, 0.06);
+  --shadow-lg: 0 8px 24px rgba(43, 29, 14, 0.13),
+               0 4px 8px  rgba(43, 29, 14, 0.08);
+  --shadow-modal: 0 20px 60px rgba(43, 29, 14, 0.20),
+                  0 8px  24px rgba(43, 29, 14, 0.13);
+
+  /* ── Transitions ─────────────────────────────── */
+  --transition-fast: 150ms ease;
+  --transition:      250ms ease;
+  --transition-slow: 400ms ease;
+}

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Chat from '@/components/Chat';
 import EmoticonFace from '@/components/EmoticonFace';
 import SamStatePanel from '@/components/SamStatePanel';
 import CoachCard from '@/components/CoachCard';
 import RegressionCallout from '@/components/RegressionCallout';
+import styles from './session.module.css';
 
 type SessionData = {
   sessionId: string;
@@ -23,21 +24,59 @@ type SessionData = {
   };
 };
 
+const SIDE_MIN = 220; // px
+const SIDE_MAX = 600; // px
+const SIDE_DEFAULT_PCT = 38; // % of viewport
+
 export default function SessionPage() {
-  const params = useParams();
-  const router = useRouter();
+  const params    = useParams();
+  const router    = useRouter();
   const sessionId = params.id as string;
 
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [emoticon, setEmoticon] = useState<'delighted' | 'happy' | 'neutral' | 'concerned' | 'sad'>('neutral');
-  const [tag, setTag] = useState('');
-  const [miscStates, setMiscStates] = useState<Record<string, string>>({});
-  const [coachNudge, setCoachNudge] = useState<{ nudge: string; trigger?: string; intensity?: string } | null>(null);
+  const [tag, setTag]           = useState('');
+  const [miscStates, setMiscStates]   = useState<Record<string, string>>({});
+  const [coachNudge, setCoachNudge]   = useState<{ nudge: string; trigger?: string; intensity?: string } | null>(null);
   const [stateTransitions, setStateTransitions] = useState<Array<{ from: string; to: string; misc_id: string }>>([]);
   const [regressionEvents, setRegressionEvents] = useState<Array<{ misc_id: string; belief: string; reason: string }>>([]);
   const [showReflection, setShowReflection] = useState(false);
-  const [reflection, setReflection] = useState('');
-  const [submittingEnd, setSubmittingEnd] = useState(false);
+  const [reflection, setReflection]         = useState('');
+  const [submittingEnd, setSubmittingEnd]   = useState(false);
+
+  // ── Resizable sidebar ──────────────────────────
+  const [sideWidthPx, setSideWidthPx] = useState<number | null>(null); // null = use CSS default
+  const [isDragging, setIsDragging]   = useState(false);
+  const dragStartX   = useRef(0);
+  const dragStartW   = useRef(0);
+  const pageRef      = useRef<HTMLElement>(null);
+
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    // Resolve current pixel width if we're still using the percentage default
+    const panel = pageRef.current?.querySelector('[data-side-panel]') as HTMLElement | null;
+    const currentW = panel ? panel.offsetWidth : Math.round(window.innerWidth * SIDE_DEFAULT_PCT / 100);
+    dragStartX.current = e.clientX;
+    dragStartW.current = currentW;
+    setIsDragging(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const onMove = (e: MouseEvent) => {
+      // Dragging handle leftward → side grows; rightward → side shrinks
+      const delta = dragStartX.current - e.clientX;
+      const next  = Math.min(SIDE_MAX, Math.max(SIDE_MIN, dragStartW.current + delta));
+      setSideWidthPx(next);
+    };
+    const onUp = () => setIsDragging(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup',  onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup',  onUp);
+    };
+  }, [isDragging]);
 
   useEffect(() => {
     const stored = sessionStorage.getItem(`session_${sessionId}`);
@@ -51,29 +90,15 @@ export default function SessionPage() {
   const handleMeta = (meta: any) => {
     if (meta.emoticon) setEmoticon(meta.emoticon);
     if (meta.tag) setTag(meta.tag);
-    if (meta.miscStates && Object.keys(meta.miscStates).length > 0) {
-      setMiscStates(meta.miscStates);
-    }
-    if (meta.coachNudge) {
-      setCoachNudge(meta.coachNudge);
-    }
-    // Handle multiple state transitions
+    if (meta.miscStates && Object.keys(meta.miscStates).length > 0) setMiscStates(meta.miscStates);
+    if (meta.coachNudge) setCoachNudge(meta.coachNudge);
     if (meta.state_transitions && meta.state_transitions.length > 0) {
       setStateTransitions(meta.state_transitions);
       const names = meta.state_transitions.map((t: any) => `${t.misc_id}: ${t.from} → ${t.to}`).join(', ');
       setTag(`Sam shifted: ${names}`);
       setTimeout(() => setStateTransitions([]), 5000);
     }
-    // Handle regression events
-    if (meta.regressionEvents && meta.regressionEvents.length > 0) {
-      setRegressionEvents(meta.regressionEvents);
-    } else {
-      setRegressionEvents([]);
-    }
-  };
-
-  const handleEnd = () => {
-    setShowReflection(true);
+    setRegressionEvents(meta.regressionEvents?.length > 0 ? meta.regressionEvents : []);
   };
 
   const submitReflectionAndEnd = async () => {
@@ -98,43 +123,56 @@ export default function SessionPage() {
 
   if (!sessionData) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-gray-500 mt-4">Loading session...</p>
+      <main className={styles.loadingPage}>
+        <div className={styles.loadingCenter}>
+          <div className={styles.spinner} />
+          <p className={styles.loadingText}>Loading session…</p>
         </div>
       </main>
     );
   }
 
   const { brief } = sessionData.session;
-  const initialMessages = sessionData.session.turns.map(t => ({
-    role: t.role,
-    content: t.content,
-  }));
+  const initialMessages = sessionData.session.turns.map(t => ({ role: t.role, content: t.content }));
+
+  // Side panel width: use measured px if dragged, else let CSS percentage handle it
+  const sidePanelStyle = sideWidthPx !== null
+    ? { width: sideWidthPx + 'px' }
+    : { width: `${SIDE_DEFAULT_PCT}%` };
 
   return (
-    <main className="h-screen flex">
-      {/* Chat — 60% */}
-      <div className="w-full lg:w-3/5 flex flex-col border-r border-gray-200">
+    <main ref={pageRef} className={styles.page}>
+      {/* Chat pane — fills remaining space */}
+      <div className={styles.chatPane}>
         <Chat
           sessionId={sessionId}
           initialMessages={initialMessages}
           personaName={brief.persona.name}
           subject={brief.subject}
           onMeta={handleMeta}
-          onEnd={handleEnd}
+          onEnd={() => setShowReflection(true)}
         />
       </div>
 
-      {/* Side panel — 40% */}
-      <div className="hidden lg:flex lg:w-2/5 flex-col p-6 space-y-6 overflow-y-auto bg-gray-50">
+      {/* Drag handle */}
+      <div
+        className={`${styles.resizeHandle} ${isDragging ? styles.dragging : ''}`}
+        onMouseDown={onDragStart}
+        title="Drag to resize"
+      />
+
+      {/* Side panel */}
+      <div
+        data-side-panel
+        className={styles.sidePanel}
+        style={sidePanelStyle}
+      >
         <EmoticonFace emoticon={emoticon} tag={tag} />
 
         {stateTransitions.length > 0 && (
-          <div className="animate-fade-in bg-teal-50 border border-teal-200 rounded-xl p-3 text-center space-y-1">
+          <div className={styles.stateTransition}>
             {stateTransitions.map((t, i) => (
-              <p key={i} className="text-teal-800 text-sm font-medium">
+              <p key={i} className={styles.stateTransitionText}>
                 {t.misc_id}: {t.from} &rarr; {t.to}
               </p>
             ))}
@@ -151,44 +189,47 @@ export default function SessionPage() {
         {coachNudge && (
           <CoachCard
             nudge={coachNudge.nudge}
-            trigger={coachNudge.trigger || 'stuck'}
-            intensity={coachNudge.intensity || 'firm'}
+
+            trigger={(coachNudge.trigger || 'stuck') as 'soft_nudge' | 'stuck' | 'reasoning_weak' | 'hint_request' | 'transfer_check'}
+            intensity={(coachNudge.intensity || 'firm') as 'soft' | 'firm' | 'directive'}
+
             onDismiss={() => setCoachNudge(null)}
           />
         )}
       </div>
 
+      {/* Reflection modal */}
       {showReflection && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6">
-          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-xl">
-            <h2 className="text-lg font-semibold text-gray-800 mb-2">Before you go &mdash; one reflection</h2>
-            <p className="text-sm text-gray-600 mb-4">
+        <div className={styles.overlay}>
+          <div className={styles.modal}>
+            <h2 className={styles.modalHeading}>Before you go &mdash; one reflection</h2>
+            <p className={styles.modalSub}>
               Name one move you tried that didn&apos;t land &mdash; and what you&apos;d try instead next time.
             </p>
             <textarea
               value={reflection}
               onChange={e => setReflection(e.target.value)}
-              placeholder="I tried &hellip; but it didn&apos;t work because &hellip;  Next time I&apos;d &hellip;"
+              placeholder="I tried … but it didn't work because …  Next time I'd …"
               rows={4}
-              className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={styles.modalTextarea}
               autoFocus
             />
-            <div className="flex items-center justify-between mt-3">
-              <span className="text-xs text-gray-400">
+            <div className={styles.modalFooter}>
+              <span className={styles.modalHint}>
                 {reflection.trim().length < 10 ? 'At least one sentence' : 'Looks good'}
               </span>
-              <div className="flex gap-2">
+              <div className={styles.modalActions}>
                 <button
                   onClick={() => setShowReflection(false)}
                   disabled={submittingEnd}
-                  className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700"
+                  className={styles.cancelBtn}
                 >
                   Keep teaching
                 </button>
                 <button
                   onClick={submitReflectionAndEnd}
                   disabled={reflection.trim().length < 10 || submittingEnd}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                  className={styles.submitBtn}
                 >
                   {submittingEnd ? 'Saving…' : 'Submit & see recap'}
                 </button>

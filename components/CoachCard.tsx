@@ -1,5 +1,7 @@
 'use client';
 
+import styles from './CoachCard.module.css';
+
 type Props = {
   nudge: string;
   trigger: 'soft_nudge' | 'stuck' | 'reasoning_weak' | 'hint_request' | 'transfer_check';
@@ -8,48 +10,41 @@ type Props = {
 };
 
 const TRIGGER_LABELS: Record<string, string> = {
-  soft_nudge: 'Suggestion',
-  stuck: 'Strategy nudge',
+  soft_nudge:     'Suggestion',
+  stuck:          'Strategy nudge',
   reasoning_weak: 'Teaching tip',
-  hint_request: 'Hint',
+  hint_request:   'Hint',
   transfer_check: 'Transfer check',
 };
 
-const INTENSITY_STYLES: Record<string, { container: string; label: string; text: string }> = {
-  soft: {
-    container: 'bg-blue-50/60 border-blue-100 shadow-none',
-    label: 'text-blue-500',
-    text: 'text-blue-700 text-xs',
-  },
-  firm: {
-    container: 'bg-amber-50 border-amber-200 shadow-sm',
-    label: 'text-amber-700',
-    text: 'text-amber-900 text-sm',
-  },
-  directive: {
-    container: 'bg-amber-50 border-amber-300 shadow-md',
-    label: 'text-amber-800 font-bold',
-    text: 'text-amber-900 text-sm font-medium',
-  },
+const CARD_CLASS:  Record<string, string> = {
+  soft:      styles.cardSoft,
+  firm:      styles.cardFirm,
+  directive: styles.cardDirective,
+};
+const LABEL_CLASS: Record<string, string> = {
+  soft:      styles.labelSoft,
+  firm:      styles.labelFirm,
+  directive: styles.labelDirective,
+};
+const TEXT_CLASS:  Record<string, string> = {
+  soft:      styles.nudgeTextSoft,
+  firm:      styles.nudgeTextFirm,
+  directive: styles.nudgeTextDirective,
 };
 
 export default function CoachCard({ nudge, trigger, intensity, onDismiss }: Props) {
-  const styles = INTENSITY_STYLES[intensity] || INTENSITY_STYLES.firm;
-
   return (
-    <div className={`animate-slide-in border rounded-xl p-4 ${styles.container}`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className={`text-xs font-semibold uppercase tracking-wide ${styles.label}`}>
-          {TRIGGER_LABELS[trigger] || 'Coach'}
+    <div className={`${styles.card} ${CARD_CLASS[intensity] ?? styles.cardFirm}`}>
+      <div className={styles.header}>
+        <span className={`${styles.label} ${LABEL_CLASS[intensity] ?? styles.labelFirm}`}>
+          {TRIGGER_LABELS[trigger] ?? 'Coach'}
         </span>
-        <button
-          onClick={onDismiss}
-          className="text-amber-400 hover:text-amber-600 text-lg leading-none"
-        >
-          &times;
-        </button>
+        <button onClick={onDismiss} className={styles.dismiss}>&times;</button>
       </div>
-      <p className={styles.text}>{nudge}</p>
+      <p className={`${styles.nudgeText} ${TEXT_CLASS[intensity] ?? styles.nudgeTextFirm}`}>
+        {nudge}
+      </p>
     </div>
   );
 }

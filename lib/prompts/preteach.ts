@@ -21,6 +21,9 @@ export function buildPreteachPrompt(brief: Brief): string {
 
 Generate three short sections in JSON:
 
+<<<<<<< HEAD
+1. **concept_primer** (60-second read, ~150 words): explain the CORRECT mental model for ${brief.subject} as it relates to ${brief.preteach_focus}. Do not mention misconceptions. This is the content the learner needs to know themselves before they can teach it. Use 1 concrete example.
+=======
 1. **concept_primer** (~350–400 words, structured markdown): A thorough explanation of the CORRECT mental model for ${brief.subject} as it relates to ${brief.preteach_focus}. Do NOT mention misconceptions. This is what the learner must understand before they can teach it.
 
 Format using markdown with these exact sections:
@@ -36,6 +39,7 @@ Walk through one concrete, specific example step by step. Make it tangible and e
 
 ## Key things to know before teaching
 3–4 bullet points (using \`- \`) of the most important things to keep in mind when teaching this topic.
+>>>>>>> origin/Akshat/Merge-Project
 
 2. **misconception_preview** (~80 words): without giving away the specific beliefs Sam holds, describe the CATEGORY of confusion students often have here. Frame the learner as a coach, not a textbook.
 
