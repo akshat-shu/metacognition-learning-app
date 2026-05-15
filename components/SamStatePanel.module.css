@@ -1,0 +1,119 @@
+.panel {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-light);
+}
+.title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Belief row ───────────────────────────────── */
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-slow);
+}
+.itemEntrenched  { background: #f5ede4; }
+.itemAware       { background: var(--purple-bg); }
+.itemConsidering { background: #ede7f6; }
+.itemUpdating    { background: var(--teal-bg); }
+.itemSettled     { background: var(--success-bg); }
+
+/* Flashes when the state transitions */
+.itemTransitioning {
+  animation: stateFlash 0.7s ease-out;
+}
+@keyframes stateFlash {
+  0%   { box-shadow: 0 0 0 0   rgba(90, 148, 112, 0.50); }
+  40%  { box-shadow: 0 0 0 4px rgba(90, 148, 112, 0.35); }
+  100% { box-shadow: 0 0 0 0   rgba(90, 148, 112, 0.00); }
+}
+
+.dot {
+  font-size: 1.1rem;
+  line-height: 1;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.dotEntrenched  { color: var(--text-muted);   }
+.dotAware       { color: var(--purple-text);  }
+.dotConsidering { color: var(--purple-text);  }
+.dotUpdating    { color: var(--teal-text);    }
+.dotSettled     { color: var(--success);      }
+
+.info { flex: 1; min-width: 0; }
+
+.state {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--text-muted);
+  /* Fades in when it changes */
+  animation: stateLabelIn 0.4s ease-out;
+}
+@keyframes stateLabelIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+/* Belief text — wraps fully, no truncation */
+.belief {
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
+/* Settled: belief text dims */
+.beliefSettled {
+  color: var(--text-muted);
+  position: relative;
+}
+
+/* Normal settled state: static strikethrough line */
+.beliefSettled::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 52%;
+  width: 100%;
+  height: 1.5px;
+  background: var(--success);
+  border-radius: 2px;
+}
+
+/* Newly settled: animate the strike line growing in */
+.beliefJustSettled::after {
+  width: 0;
+  animation: strikeGrow 0.55s cubic-bezier(0.4, 0, 0.2, 1) 0.15s forwards;
+}
+@keyframes strikeGrow {
+  to { width: 100%; }
+}
+
+/* New state label slides up when transitioning */
+.stateNew {
+  animation: stateSlideIn 0.35s ease-out;
+}
+@keyframes stateSlideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}

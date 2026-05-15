@@ -1,0 +1,43 @@
+.card {
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  border: 1px solid;
+  animation: slideIn 0.3s ease-out;
+}
+.cardSoft      { background: var(--info-bg);  border-color: var(--info-border);  box-shadow: none; }
+.cardFirm      { background: var(--warn-bg);  border-color: var(--warn-border);  box-shadow: var(--shadow-sm); }
+.cardDirective { background: var(--warn-bg);  border-color: var(--warn);         box-shadow: var(--shadow); }
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.labelSoft      { color: var(--info);         }
+.labelFirm      { color: var(--warn);         }
+.labelDirective { color: var(--danger);       }
+
+.dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0;
+  color: var(--text-muted);
+  transition: color var(--transition-fast);
+}
+.dismiss:hover { color: var(--text-secondary); }
+
+.nudgeText { line-height: 1.6; }
+.nudgeTextSoft      { font-size: 0.8rem;   color: var(--info-text);         }
+.nudgeTextFirm      { font-size: 0.875rem; color: var(--warn-text);         }
+.nudgeTextDirective { font-size: 0.875rem; color: var(--warn-text); font-weight: 500; }
