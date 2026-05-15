@@ -64,6 +64,8 @@ export default function Chat({ sessionId, initialMessages, personaName, subject,
   const [move, setMove] = useState<Move>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [hintLoading, setHintLoading] = useState(false);
+  const [hintCooldownUntilTurn, setHintCooldownUntilTurn] = useState(0);
+  const [turnCount, setTurnCount] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -134,6 +136,7 @@ export default function Chat({ sessionId, initialMessages, personaName, subject,
           } catch {}
         }
       }
+      setTurnCount(prev => prev + 1);
     } catch (error) {
       console.error('Chat error:', error);
     } finally {
@@ -141,7 +144,10 @@ export default function Chat({ sessionId, initialMessages, personaName, subject,
     }
   };
 
+  const hintOnCooldown = turnCount < hintCooldownUntilTurn;
+
   const requestHint = async () => {
+    if (hintOnCooldown) return;
     setHintLoading(true);
     try {
       const res = await fetch('/api/coach/request', {
@@ -155,11 +161,13 @@ export default function Chat({ sessionId, initialMessages, personaName, subject,
           scores: {},
           emoticon: '',
           tag: '',
-          state_transition: null,
+          state_transitions: [],
           coachNudge: data,
           miscStates: {},
           intent: '',
         } as any);
+        // Set 1-turn cooldown
+        setHintCooldownUntilTurn(turnCount + 1);
       }
     } catch (error) {
       console.error('Hint request error:', error);
@@ -274,13 +282,13 @@ export default function Chat({ sessionId, initialMessages, personaName, subject,
           <div className="relative group">
             <button
               onClick={requestHint}
-              disabled={hintLoading || isStreaming}
+              disabled={hintLoading || isStreaming || hintOnCooldown}
               className="px-3 py-3 bg-amber-100 text-amber-700 rounded-xl text-sm font-medium hover:bg-amber-200 transition-colors disabled:opacity-50"
             >
-              {hintLoading ? '...' : 'Hint'}
+              {hintLoading ? '...' : hintOnCooldown ? 'Next turn' : 'Hint'}
             </button>
             <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              Get a strategy nudge from the coach. Small scoring penalty applies.
+              {hintOnCooldown ? 'Hint available next turn.' : 'Get a strategy nudge from the coach. Small scoring penalty applies.'}
             </div>
           </div>
         </div>

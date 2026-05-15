@@ -1,5 +1,14 @@
 import { TurnIntent, SamMode, Brief, MisconceptionState } from '../types';
 
+// Per-state behavioral guidance — tells the Student LLM exactly how to sound
+const STATE_BEHAVIOR: Record<MisconceptionState, string> = {
+  entrenched: "State your belief flatly with confidence. The user hasn't given you reason to doubt it yet. Push back on corrections without acknowledging them.",
+  aware: "Acknowledge the user's argument explicitly before pushing back. You haven't conceded the point, but you're listening. Use phrases like 'okay I see what you mean, but...' or 'that's a fair point, except...'.",
+  considering: "Hedge clearly. Voice real doubt about your own position. Acceptable phrases: 'wait, maybe...', 'okay actually that part makes sense...', 'I'm getting confused about which part I believe'. You should NOT confidently restate the original belief.",
+  updating: "Largely accept the new model in your own words. Articulate the corrected understanding. Only raise specific residual confusion about edge cases or implications. You MUST NOT restate the original misconception as if you still believe it.",
+  settled: "Do not express this belief at all — you've moved past it. If somehow asked, acknowledge the corrected understanding naturally. Ask a curious follow-up question instead.",
+};
+
 export function buildIntentPrelude(
   intent: TurnIntent,
   mode: SamMode,
@@ -13,25 +22,33 @@ export function buildIntentPrelude(
       return `For THIS turn: ask a real clarifying question — something a curious learner would actually wonder about. No misconception. Mode: ${mode}.`;
     case 'honest_partial':
       return `For THIS turn: acknowledge what's correct or helpful in what the user just said. Brief response. Mode: ${mode}.`;
+
     case 'express_misc': {
       const m = brief.misconceptions.find(x => x.id === intent.misc_id)!;
-      const state = miscStates[intent.misc_id];
-      if (state === 'entrenched') {
-        return `For THIS turn: express the belief "${m.belief}". You fully believe this. Depth ${m.depth}/5. Mode: ${mode}. Speak this belief in your own voice, fitting the conversation naturally.`;
-      }
-      if (state === 'aware') {
-        return `For THIS turn: you're starting to question "${m.belief}" but haven't let go. Express it with some doubt — "I mean, I think..." or "but isn't it true that...". Show you heard the user but haven't fully shifted. Mode: ${mode}.`;
-      }
-      return `For THIS turn: you're actively reconsidering "${m.belief}". You're not sure anymore. Express genuine confusion — "wait, so does that mean..." or "okay but then why...". Show real engagement with the user's arguments. Mode: ${mode}.`;
+      const state = miscStates[intent.misc_id] || 'entrenched';
+      return `For THIS turn: you are voicing your belief "${m.belief}".
+
+CURRENT STATE on this belief: ${state}
+${STATE_BEHAVIOR[state]}
+
+Depth ${m.depth}/5 controls how much teaching across the session is needed to advance state. It does NOT control how to behave on THIS individual turn — current state above controls that.
+
+Mode: ${mode}.`;
     }
+
     case 'defend_misc': {
       const m = brief.misconceptions.find(x => x.id === intent.misc_id)!;
-      const state = miscStates[intent.misc_id];
-      if (state === 'aware' || state === 'considering') {
-        return `For THIS turn: the user attempted to correct "${m.belief}". You're wavering but not convinced yet. Push back gently — ask for more evidence, express what still doesn't click. Don't flatly deny, but don't fully agree either. Mode: ${mode}.`;
-      }
-      return `For THIS turn: the user attempted to correct "${m.belief}". Push back. If their attempt was strong (evidence, analogy, example), hedge or partially update; if weak (assertion, "trust me"), hold firm. Mode: ${mode}.`;
+      const state = miscStates[intent.misc_id] || 'entrenched';
+      return `For THIS turn: the user attempted to correct your belief "${m.belief}". Respond.
+
+CURRENT STATE on this belief: ${state}
+${STATE_BEHAVIOR[state]}
+
+Depth ${m.depth}/5 controls how much teaching across the session is needed to advance state. It does NOT control how to behave on THIS individual turn — current state above controls that.
+
+Mode: ${mode}.`;
     }
+
     case 'probe_minor': {
       const p = brief.probe_claims.find(x => x.id === intent.probe_id)!;
       return `For THIS turn: reason correctly about the main topic, but slip in this minor wrong claim: "${p.claim}". Speak it without flagging it as uncertain — make it sound like an offhand assumption. Mode: ${mode}.`;

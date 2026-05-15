@@ -6,6 +6,7 @@ import Chat from '@/components/Chat';
 import EmoticonFace from '@/components/EmoticonFace';
 import SamStatePanel from '@/components/SamStatePanel';
 import CoachCard from '@/components/CoachCard';
+import RegressionCallout from '@/components/RegressionCallout';
 
 type SessionData = {
   sessionId: string;
@@ -31,8 +32,9 @@ export default function SessionPage() {
   const [emoticon, setEmoticon] = useState<'delighted' | 'happy' | 'neutral' | 'concerned' | 'sad'>('neutral');
   const [tag, setTag] = useState('');
   const [miscStates, setMiscStates] = useState<Record<string, string>>({});
-  const [coachNudge, setCoachNudge] = useState<{ nudge: string; type: string } | null>(null);
-  const [stateTransition, setStateTransition] = useState<{ from: string; to: string } | null>(null);
+  const [coachNudge, setCoachNudge] = useState<{ nudge: string; trigger?: string; intensity?: string } | null>(null);
+  const [stateTransitions, setStateTransitions] = useState<Array<{ from: string; to: string; misc_id: string }>>([]);
+  const [regressionEvents, setRegressionEvents] = useState<Array<{ misc_id: string; belief: string; reason: string }>>([]);
   const [showReflection, setShowReflection] = useState(false);
   const [reflection, setReflection] = useState('');
   const [submittingEnd, setSubmittingEnd] = useState(false);
@@ -55,10 +57,18 @@ export default function SessionPage() {
     if (meta.coachNudge) {
       setCoachNudge(meta.coachNudge);
     }
-    if (meta.state_transition) {
-      setStateTransition({ from: meta.state_transition.from, to: meta.state_transition.to });
-      setTag(`Sam shifted: ${meta.state_transition.from} → ${meta.state_transition.to}`);
-      setTimeout(() => setStateTransition(null), 5000);
+    // Handle multiple state transitions
+    if (meta.state_transitions && meta.state_transitions.length > 0) {
+      setStateTransitions(meta.state_transitions);
+      const names = meta.state_transitions.map((t: any) => `${t.misc_id}: ${t.from} → ${t.to}`).join(', ');
+      setTag(`Sam shifted: ${names}`);
+      setTimeout(() => setStateTransitions([]), 5000);
+    }
+    // Handle regression events
+    if (meta.regressionEvents && meta.regressionEvents.length > 0) {
+      setRegressionEvents(meta.regressionEvents);
+    } else {
+      setRegressionEvents([]);
     }
   };
 
@@ -121,13 +131,17 @@ export default function SessionPage() {
       <div className="hidden lg:flex lg:w-2/5 flex-col p-6 space-y-6 overflow-y-auto bg-gray-50">
         <EmoticonFace emoticon={emoticon} tag={tag} />
 
-        {stateTransition && (
-          <div className="animate-fade-in bg-teal-50 border border-teal-200 rounded-xl p-3 text-center">
-            <p className="text-teal-800 text-sm font-medium">
-              Sam shifted: {stateTransition.from} &rarr; {stateTransition.to}
-            </p>
+        {stateTransitions.length > 0 && (
+          <div className="animate-fade-in bg-teal-50 border border-teal-200 rounded-xl p-3 text-center space-y-1">
+            {stateTransitions.map((t, i) => (
+              <p key={i} className="text-teal-800 text-sm font-medium">
+                {t.misc_id}: {t.from} &rarr; {t.to}
+              </p>
+            ))}
           </div>
         )}
+
+        <RegressionCallout events={regressionEvents} />
 
         <SamStatePanel
           miscStates={miscStates as any}
@@ -137,7 +151,8 @@ export default function SessionPage() {
         {coachNudge && (
           <CoachCard
             nudge={coachNudge.nudge}
-            type={coachNudge.type as any}
+            trigger={coachNudge.trigger || 'stuck'}
+            intensity={coachNudge.intensity || 'firm'}
             onDismiss={() => setCoachNudge(null)}
           />
         )}

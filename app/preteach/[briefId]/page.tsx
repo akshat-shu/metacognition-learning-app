@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import PreteachFlow from '@/components/PreteachFlow';
 
@@ -18,7 +18,11 @@ export default function PreteachPage() {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
 
+  const fetchedRef = useRef(false);
+
   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
     async function init() {
       try {
         const res = await fetch('/api/preteach/init', {
