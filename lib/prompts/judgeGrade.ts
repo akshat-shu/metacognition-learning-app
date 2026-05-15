@@ -54,7 +54,7 @@ ${buildTransitionGuidance(intentObj, miscStates, misconceptions)}
 Tag: 2-4 words describing the user's message.
 Evidence: one sentence on what triggered the scores.
 
-Respond with ONLY valid JSON. Emit 0, 1, or more state transitions if the user's move clearly affects multiple misconceptions. Be conservative — if a transition is uncertain, don't emit it.
+Respond with ONLY valid JSON. Emit 0, 1, or more state transitions if the user's move affects misconceptions. Match transition frequency to teaching quality — consistently strong teaching should produce steady state advancement, not stagnation.
 
 When NO state change: {"scores":{"framing":3,"questions":3,"reasoning":3,"uncertainty":3,"calibration":3},"emoticon":"neutral","tag":"example","evidence":"example","state_transitions":[]}
 
@@ -78,13 +78,18 @@ function buildTransitionGuidance(
       return 'No transition expected (misconception already settled).';
     }
     const next = getNextState(current);
-    return `CRITICAL — you MUST evaluate transition for "${miscId}" (currently "${current}"):
+    const misc = misconceptions.find(x => x.id === miscId);
+    const depth = misc?.depth ?? 3;
+    const thresholds = getTransitionThresholds(current, depth);
+    return `CRITICAL — you MUST evaluate transition for "${miscId}" (currently "${current}", depth ${depth}/5):
 
 State transitions reflect the QUALITY OF THE USER'S TEACHING ATTEMPT, not the student's response. If the user teaches well, ADVANCE the state even before the student responds. The student's acceptance is modeled separately.
 
+${getStateContext(current)}
+
 Rules (check the user's scores, then decide):
-- If questions >= 3 (user asked a probing question): ADVANCE to "${next}"
-- If reasoning >= 3.5 (user gave evidence/example/analogy): ADVANCE to "${next}"
+- If questions >= ${thresholds.questions} (user asked a probing question): ADVANCE to "${next}"
+- If reasoning >= ${thresholds.reasoning} (user gave evidence/example/analogy): ADVANCE to "${next}"
 - If the user just made flat assertions with no reasoning or questions: NO transition
 - If the user accepted/agreed with the wrong belief: REGRESS one step
 
@@ -94,7 +99,7 @@ You MUST output one of these two options:
   }
 
   if (intent.type === 'transfer_check' && miscStates[intent.misc_id] === 'updating') {
-    return `Evaluate transfer for "${intent.misc_id}": if user tested Sam's application (uncertainty >= 4), advance to "settled".`;
+    return `Evaluate transfer for "${intent.misc_id}": if user tested Sam's application (uncertainty >= 3), advance to "settled".`;
   }
 
   // EVEN on honest turns, check if user addressed any misconception topic
@@ -102,20 +107,59 @@ You MUST output one of these two options:
     .filter(([, s]) => s !== 'settled' && s !== 'updating')
     .map(([id, state]) => {
       const m = misconceptions.find(x => x.id === id);
-      return { id, state, belief: m?.belief || '' };
+      return { id, state, belief: m?.belief || '', depth: m?.depth ?? 3 };
     });
 
   if (unsettled.length > 0) {
-    const miscList = unsettled.map(u => `  - "${u.id}" ("${u.belief}"): "${u.state}" → next would be "${getNextState(u.state as MisconceptionState)}"`).join('\n');
+    const miscList = unsettled.map(u => {
+      const thresholds = getTransitionThresholds(u.state as MisconceptionState, u.depth);
+      return `  - "${u.id}" ("${u.belief}"): "${u.state}" → next would be "${getNextState(u.state as MisconceptionState)}" (need questions >= ${thresholds.questionsHonest} or reasoning >= ${thresholds.reasoningHonest})`;
+    }).join('\n');
     return `Even though Sam's last turn was honest, CHECK if the user's message directly addresses any of these misconception topics:
 ${miscList}
 
-If the user's message provides evidence, asks probing questions, or uses examples that would help correct one of these beliefs, you MAY emit a state_transition to advance it. This represents the user proactively teaching even when Sam isn't expressing confusion.
+If the user's message provides evidence, asks probing questions, or uses examples that would help correct one of these beliefs, you SHOULD emit a state_transition to advance it. This represents the user proactively teaching even when Sam isn't expressing confusion.
 
-Only advance if the user's message is clearly relevant and pedagogically strong (reasoning >= 3.5 or questions >= 3.5). Otherwise null.`;
+Advance any misconception whose topic the user clearly addresses with sufficient quality (see thresholds above). Multiple transitions are fine.`;
   }
 
   return 'No misconceptions to track. state_transition: null';
+}
+
+// Thresholds scale with state progression and depth:
+// Later states (considering→updating) need LESS force since Sam is already doubting.
+// Lower depth means easier transitions overall.
+function getTransitionThresholds(state: MisconceptionState, depth: number): {
+  questions: number; reasoning: number; questionsHonest: number; reasoningHonest: number;
+} {
+  const depthMod = depth <= 2 ? -0.5 : depth >= 4 ? 0.5 : 0;
+  switch (state) {
+    case 'entrenched': return {
+      questions: 3 + depthMod, reasoning: 3.5 + depthMod,
+      questionsHonest: 3.5 + depthMod, reasoningHonest: 4 + depthMod,
+    };
+    case 'aware': return {
+      questions: 2.5 + depthMod, reasoning: 3 + depthMod,
+      questionsHonest: 3 + depthMod, reasoningHonest: 3.5 + depthMod,
+    };
+    case 'considering': return {
+      questions: 2 + depthMod, reasoning: 2.5 + depthMod,
+      questionsHonest: 2.5 + depthMod, reasoningHonest: 3 + depthMod,
+    };
+    default: return {
+      questions: 3, reasoning: 3.5,
+      questionsHonest: 3.5, reasoningHonest: 3.5,
+    };
+  }
+}
+
+function getStateContext(state: MisconceptionState): string {
+  switch (state) {
+    case 'entrenched': return 'The student fully believes this misconception. A strong teaching move is needed to create initial doubt.';
+    case 'aware': return 'The student is listening but still pushes back. A clear explanation or good question should move them forward.';
+    case 'considering': return 'The student is already actively doubting their belief. Even a moderate teaching move (analogy, example, follow-up question) should be enough to push to "updating". The bar is LOWER here — the student is primed to shift.';
+    default: return '';
+  }
 }
 
 function getNextState(state: MisconceptionState): string {
