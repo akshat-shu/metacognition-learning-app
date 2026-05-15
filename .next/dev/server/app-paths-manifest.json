@@ -1,5 +1,0 @@
-{
-  "/api/preteach/init/route": "app/api/preteach/init/route.js",
-  "/page": "app/page.js",
-  "/preteach/[briefId]/page": "app/preteach/[briefId]/page.js"
-}
