@@ -1,0 +1,204 @@
+/* ── Layout ──────────────────────────────────────── */
+.page {
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  user-select: none; /* prevent text selection while dragging */
+}
+
+/* On mobile: chat takes full width, side panel hidden */
+.chatPane {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidePanel {
+  display: none;
+}
+
+/* ── Resize handle ───────────────────────────────── */
+.resizeHandle {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  /* Chat pane fills all space not claimed by handle + side panel */
+  .chatPane {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /* Drag handle */
+  .resizeHandle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 8px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: var(--border-light);
+    transition: background var(--transition-fast);
+    position: relative;
+    z-index: 10;
+  }
+  .resizeHandle:hover,
+  .resizeHandle.dragging {
+    background: var(--primary-light);
+  }
+  /* Drag grip dots */
+  .resizeHandle::after {
+    content: '';
+    display: block;
+    width: 3px;
+    height: 32px;
+    border-left: 1.5px dotted var(--text-muted);
+    border-right: 1.5px dotted var(--text-muted);
+    border-radius: 2px;
+    opacity: 0.5;
+  }
+  .resizeHandle:hover::after,
+  .resizeHandle.dragging::after {
+    opacity: 1;
+  }
+
+  .sidePanel {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    padding: 24px;
+    gap: 20px;
+    overflow-y: auto;
+    background: var(--bg-surface-alt);
+    border-left: none;
+    min-width: 220px;
+    max-width: 600px;
+  }
+}
+
+/* ── State transition callout ─────────────────── */
+.stateTransition {
+  background: var(--teal-bg);
+  border: 1px solid var(--teal-border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  text-align: center;
+  animation: fadeIn 0.3s ease-out;
+}
+.stateTransitionText {
+  color: var(--teal-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* ── Reflection modal overlay ─────────────────── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(43, 29, 14, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 24px;
+  backdrop-filter: blur(2px);
+}
+.modal {
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  padding: 28px;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: var(--shadow-modal);
+  animation: slideUp 0.3s ease-out;
+}
+.modalHeading {
+  font-family: var(--font-heading);
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.modalSub {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  line-height: 1.65;
+}
+.modalTextarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  background: var(--bg-page);
+  font-family: var(--font-body);
+  resize: none;
+  outline: none;
+  transition: border-color var(--transition-fast),
+              box-shadow    var(--transition-fast);
+  box-sizing: border-box;
+}
+.modalTextarea:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+.modalHint { font-size: 0.75rem; color: var(--text-muted); }
+.modalActions { display: flex; gap: 8px; }
+
+.cancelBtn {
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.cancelBtn:hover { color: var(--text-secondary); }
+
+.submitBtn {
+  padding: 9px 18px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.875rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform 80ms;
+}
+.submitBtn:hover:not(:disabled) { background: var(--primary-hover); }
+.submitBtn:active:not(:disabled) { transform: scale(0.97); }
+.submitBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Loading / Error states ───────────────────── */
+.loadingPage {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.loadingCenter { text-align: center; }
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto;
+}
+.loadingText {
+  color: var(--text-muted);
+  margin-top: 16px;
+  font-size: 0.875rem;
+}
