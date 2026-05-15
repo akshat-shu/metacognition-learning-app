@@ -12,8 +12,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Brief not found' }, { status: 404 });
     }
 
+    const prompt = buildPreteachPrompt(brief);
+    console.log(`[preteach] briefId=${briefId} promptLen=${prompt.length} briefSubject=${brief.subject}`);
     const messages = [
-      { role: 'user' as const, content: buildPreteachPrompt(brief) },
+      { role: 'user' as const, content: prompt },
     ];
 
     const result = await callJSONValidated(messages, 'judge', PreteachResultSchema, 2, { reasoningEffort: 'low' });

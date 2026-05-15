@@ -17,13 +17,19 @@ export default function PreteachPage() {
   } | null>(null);
   const [loading, setLoading]   = useState(true);
   const [starting, setStarting] = useState(false);
+<<<<<<< HEAD
+  const [error, setError] = useState('');
+  const initiated = useRef(false);
+=======
   const [error, setError]       = useState('');
+>>>>>>> 47b3181 (removed secret)
 
   const fetchedRef = useRef(false);
 
   useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
+    if (initiated.current) return;
+    initiated.current = true;
+
     async function init() {
       try {
         const res = await fetch('/api/preteach/init', {
