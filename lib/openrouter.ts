@@ -33,6 +33,13 @@ function getModels(role: LLMRole): string[] {
     const primary = process.env.STUDENT_MODEL || 'google/gemma-4-26b-a4b-it:free';
     return [primary, 'openrouter/free'];
   }
+  if (role === 'grader') {
+    // Grader needs the strongest model — it evaluates teaching quality and decides state transitions
+    const primary = process.env.GRADER_MODEL || process.env.STUDENT_MODEL || 'qwen/qwen3.5-plus-20260420';
+    const fallback = process.env.JUDGE_MODEL || 'qwen/qwen3.5-flash-02-23';
+    return [primary, fallback, 'openrouter/free'];
+  }
+  // Judge role: coach, preteach, synthesis — lighter model is fine
   const primary = process.env.JUDGE_MODEL || 'google/gemma-4-31b-it:free';
   return [primary, 'google/gemma-4-26b-a4b-it:free', 'openrouter/free'];
 }
